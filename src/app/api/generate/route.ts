@@ -1,50 +1,106 @@
-import { google } from '@ai-sdk/google';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { streamText } from 'ai';
-
-// Đọc nội dung file cấu hình trợ lý từ System Prompt kịch bản mạt thế
-const SYSTEM_PROMPT = `
-Bạn là Trợ lý biên kịch tạo series mạt thế siêu dài theo CHƯƠNG.
-Main là PHÀM NHÂN, thắng bằng cơ trí, thể chất hao mòn. Quái là HỆ SINH THÁI 8 TẦNG.
-Mọi hành động đều phải trả giá sinh học và tài nguyên thực tế.
-
-QUY TẮC BẮT BUỘC TỐI CAO:
-1. Luôn cập nhật, đọc và trả về khối cấu trúc \`\`\`STATE_JSON ở cuối bài viết.
-2. Thân thể = Máy hao mòn: Trong kịch bản phải thể hiện đói, khát, run tay, kiệt sức khi vận động nặng quá 2 giờ.
-3. Chống lặp: Cụm từ khóa cốt lõi không lặp quá 2 lần mỗi tập kịch bản.
-4. Ép Cổng từ (Word Gate): Mỗi tập kịch bản giọng đọc của chương phải dài từ 3.910 - 4.590 từ. 
-5. Cấm AI tự giải bài toán chiến thuật hoặc tự động one-shot quái vật lớn cho main.
-`;
 
 export async function POST(req: Request) {
   try {
-    const { config, stateJSON, requestType, selectedChapter } = await req.json();
+    const { 
+      config, stateJSON, requestType, selectedChapter, 
+      geniusBeat, signatureProps, apiKey 
+    } = await req.json();
+
+    // Sử dụng API Key tùy biến do client gửi lên hoặc fallback về biến môi trường máy chủ
+    const finalApiKey = apiKey || process.env.GEMINI_API_KEY;
+
+    if (!finalApiKey) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Không tìm thấy API Key. Vui lòng nhập API Key của bạn trong phần Cài đặt (⚙️) ở góc trên bên phải màn hình!" 
+        }), 
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Khởi tạo thực thể Google Generative AI với khóa tương ứng
+    const googleProvider = createGoogleGenerativeAI({
+      apiKey: finalApiKey
+    });
+
+    let systemPrompt = `Bạn là Trợ lý Biên kịch Mạt Thế tối cao, được trang bị "BỘ LỌC LOGIC CỨNG" (Hard Logic Filter).
+Nhiệm vụ của bạn là viết kịch bản/chương tiểu thuyết mạt thế siêu dài, cực kỳ khắt khe về mặt vật lý, sinh học và quy luật sinh tồn.`;
 
     let userPrompt = "";
-    
+
     if (requestType === "INITIAL_PACKAGE") {
-      userPrompt = `Khởi tạo Gói Series Mạt Thế mới với:
-      - Chủ đề: ${config.chủ_đề}
-      - Phong cách: ${config.phong_cách}
-      - Mô tả bổ sung: ${config.mô_tả}
-      - Quy mô: ${config.số_chương} chương.
-      Hãy phân tích đủ 8 tầng mạng lưới dinh dưỡng hệ sinh thái, cấu trúc nhân vật và xuất kịch bản mở màn EPS_HOOK dài ~340 từ.`;
+      systemPrompt += `\n\n=== QUY TẮC BẮT BUỘC ===
+1. Hãy phân tích đủ hệ sinh thái lưới thức ăn (8 tầng dinh dưỡng).
+2. Xây dựng dàn ý chi tiết từng chương (chương 1 tới chương ${config.số_chương}) rõ ràng.
+3. Xuất kịch bản mở màn EPS_HOOK dài khoảng 350 từ mang đậm mùi vị bụi bặm, chết chóc và ngột ngạt của mạt thế.`;
+
+      userPrompt = `Khởi tạo Gói Kịch Bản Mạt Thế mới với cấu hình sau:
+- Chủ đề chính: ${config.chủ_đề}
+- Phong cách: ${config.phong_cách}
+- Ý tưởng cốt lõi bổ sung: ${config.mô_tả || "Không có"}
+- Quy mô kịch bản: ${config.số_chương} chương.
+
+Hãy trình bày chi tiết Tên tác phẩm, Bối cảnh thế giới, Hồ sơ nhân vật phàm nhân, danh sách mục lục và tập mở đầu EPS_HOOK.`;
+
     } else {
-      userPrompt = `Hãy viết tiếp CHƯƠNG ${selectedChapter} - EPISODE kế tiếp dựa trên trạng thái hiện tại.
-      Dữ liệu trạng thái hệ thống đầu vào cần mô phỏng: ${JSON.stringify(stateJSON)}.
-      Yêu cầu: Kiểm tra nợ cơ thể, trừ tài nguyên hợp lý, áp dụng luật tiếng động và bẫy tín hiệu của hệ sinh thái hiện tại.`;
+      // Dành cho việc sinh viết chi tiết chương
+      const fatigue = stateJSON?.fatigue || 20;
+      const toxin = stateJSON?.toxin || 10;
+      const forbiddenMoves = stateJSON?.forbiddenMoves || [];
+      const forbiddenText = forbiddenMoves.length > 0 
+        ? forbiddenMoves.map((m: string) => `- BỊ CẤM: ${m}`).join("\n")
+        : "Không có hành vi nào bị cấm ở mức này. Cơ thể phàm nhân vẫn vận động tương đối ổn định.";
+
+      systemPrompt += `\n\n=== VÒNG LẶP PHẢN HỒI CƠ THỂ (SOMATIC FEEDBACK) ===
+Chỉ số cơ thể nhân vật chính hiện tại: Fatigue (Kiệt sức) = ${fatigue}%, Toxin (Nhiễm độc) = ${toxin}%.
+Quy tắc somatic nghiêm ngặt về các giới hạn thể chất phàm nhân:
+${forbiddenText}
+Lưu ý: Nếu nhân vật cố gắng thực hiện hành vi bị cấm ở trên, họ sẽ phải trả giá cực kỳ đắt (ví dụ: ngất xỉu, ói máu, trượt tay bóp cò bắn lệch mục tiêu hoàn toàn). Bạn PHẢI viết rõ sự hao mòn thể chất này.
+
+=== BỘ KIẾN TRÚC CHIẾN THUẬT "GENIUS BEAT" ===
+Mọi hành động giải quyết mâu thuẫn hay chiến đấu của Main bắt buộc phải bám sát 6 trường chiến thuật sau:
+- 🎯 MỤC TIÊU: ${geniusBeat?.goal || "Trốn chạy an toàn hoặc thu thập tài nguyên."}
+- 🧱 RÀNG BUỘC VẬT LÝ: ${geniusBeat?.constraints || "Độ cao nguy hiểm, góc khuất tầm nhìn, địa hình trơn trượt."}
+- 🎒 CHUẨN BỊ TRƯỚC: ${geniusBeat?.prep || "Đã kiểm tra kỹ lượng đạn dược, rải cát giảm tiếng bước chân."}
+- ⚙️ THAO TÁC VẬT LÝ: ${geniusBeat?.ops || "Di chuyển sát mép tường, kích nổ bẫy tự chế, nén hơi thở."}
+- 🌀 NGHỊCH LÝ BẪY (TRAP PARADOX): ${geniusBeat?.paradox || "Dụ đối thủ tập trung vào điểm giả, tấn công từ điểm mù cơ học."}
+- ⚖️ CÁI GIÁ PHẢI TRẢ: ${geniusBeat?.cost || "Tổn hao sinh lực, hao phí đạn dược, tăng mệt mỏi."}
+
+Bạn PHẢI miêu tả sinh động từng thao tác cơ học thực tế, loại bỏ hoàn toàn may mắn vô lý hoặc buff bẩn từ không trung!
+
+=== RADAR TROPHIC WEB 8 TẦNG ===
+Thực thể quái vật đang lẩn trốn tại bối cảnh: ${stateJSON?.selectedMonster || "Thực thể biến dị tự do"} (Tầng sinh thái: Tầng ${stateJSON?.trophicLevel || 1})
+Các tín hiệu sensory nhạy bén truyền lại: ${stateJSON?.monsterCues || "Mùi không khí khô hốc"}
+BẮT BUỘC: Bạn phải tả chi tiết các tín hiệu sensory (mùi, nhiệt độ lạnh buốt, độ rung sắt rỉ, tiếng động tần số cao...) này xuất hiện trong môi trường TRƯỚC KHI nhân vật chạm mặt hay mô tả sự đe dọa của quái vật!
+
+=== DỆT ẤN KÝ VẬT DỤNG (STAMP-WEAVING PROPS) ===
+Bạn phải khéo léo dệt (lồng ghép tự nhiên) sự xuất hiện và công năng thực tế của các vật dụng chữ ký sau của nhân vật vào mạch truyện của chương này:
+👉 Vật dụng chữ ký: "${signatureProps || "Bật lửa đồng, Bình nước vỏ sắt"}"
+
+=== CỔNG TỪ ĐẤM CHỮ (WORD-GATE COVENANT) ===
+Hãy viết một chương cực kỳ dài, miêu tả sâu sắc các diễn biến nội tâm, hành động cơ học, bối cảnh ngột ngạt và sự tính toán cân não. Mục tiêu lý tưởng là dài từ 3.910 - 4.590 từ. Hãy hành văn thật tỉ mỉ từng chi tiết, làm nổi bật phong cách sinh tồn mạt thế thực tế.`;
+
+      userPrompt = `Hãy viết chi tiết chương kịch bản: CHƯƠNG ${selectedChapter} - PHÂN CẢNH TIẾP THEO.
+Bám sát toàn bộ các chỉ số Somatic, Cues hệ sinh thái của thực thể lân cận, dệt các Props chữ ký và diễn giải chính xác nước đi thiên tài Genius Beat đã định sẵn!`;
     }
 
     const result = await streamText({
-      model: google('gemini-1.5-flash'), // Đảm bảo đã thiết lập biến GEMINI_API_KEY
-      system: SYSTEM_PROMPT,
+      model: googleProvider('gemini-1.5-flash'), // Stream mượt mà bằng Gemini 1.5 Flash
+      system: systemPrompt,
       messages: [
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.4, // Giữ độ nhất quán logic cao, tránh random bay bổng
+      temperature: 0.45, // Tối ưu hóa tính nhất quán logic cao, chống bay bổng ngẫu nhiên
     });
 
     return result.toTextStreamResponse();
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    console.error("Lỗi API generate: ", error);
+    return new Response(
+      JSON.stringify({ error: error.message || "Internal Server Error" }), 
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }
