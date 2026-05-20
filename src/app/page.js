@@ -11,6 +11,24 @@ export default function Home() {
   const [keyInputText, setKeyInputText] = useState("");
   const [expandedSection, setExpandedSection] = useState("somatic"); // "somatic" | "genius" | "trophic" | "props"
 
+  // Injury Tracker Form State
+  const [newInjuryPart, setNewInjuryPart] = useState("");
+  const [newInjuryPain, setNewInjuryPain] = useState(5);
+  const [newInjuryConsequence, setNewInjuryConsequence] = useState("");
+
+  const handleAddInjurySubmit = (e) => {
+    e.preventDefault();
+    if (!newInjuryPart.trim() || !newInjuryConsequence.trim()) return;
+    store.addInjury({
+      part: newInjuryPart.trim(),
+      pain: newInjuryPain,
+      consequence: newInjuryConsequence.trim()
+    });
+    setNewInjuryPart("");
+    setNewInjuryPain(5);
+    setNewInjuryConsequence("");
+  };
+
   // Load API keys into local state when opening settings
   useEffect(() => {
     if (store.apiKeys && store.apiKeys.length > 0) {
@@ -174,11 +192,18 @@ export default function Home() {
 
   const activeChapter = store.chapters[store.activeChapterIndex];
   
-  // Lọc danh sách hành vi bị cấm hiện tại của somatic feedback
+  // Lọc danh sách hành vi bị cấm hiện tại của somatic feedback + Chấn thương vật lý
   const currentForbidden = FORBIDDEN_MOVES.filter(m => {
     if (m.minFatigue && store.fatigue >= m.minFatigue) return true;
     if (m.minToxin && store.toxin >= m.minToxin) return true;
     return false;
+  }).map(m => ({ move: m.move }));
+
+  // Nạp chấn thương vật lý
+  store.injuries.forEach(inj => {
+    currentForbidden.push({
+      move: `Bị thương ở ${inj.part} (Độ đau ${inj.pain}/10): ${inj.consequence}`
+    });
   });
 
   const parsedProps = store.signatureProps
@@ -297,12 +322,21 @@ export default function Home() {
 
             {/* 3. MÔ TẢ Ý TƯỞNG CỐT TRUYỆN */}
             <div className="form-section">
-              <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2 font-heading">3. Ý tưởng kịch bản gốc</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-bold text-white uppercase tracking-wider font-heading">3. Ý tưởng kịch bản gốc</label>
+                <button
+                  type="button"
+                  onClick={() => store.generateAIPrompt()}
+                  className="px-3 py-1 text-xs rounded-full bg-orange-950/45 hover:bg-orange-900/60 border border-orange-500/30 text-orange-400 font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  ✨ AI Tự Tạo Ý Tưởng
+                </button>
+              </div>
               <textarea 
                 className="w-full h-24 p-3 bg-zinc-950 border border-zinc-900 rounded-lg text-sm text-zinc-300 focus:outline-none focus:border-zinc-800 placeholder-zinc-700" 
                 value={store.prompt}
                 onChange={(e) => store.setPrompt(e.target.value)}
-                placeholder="Ví dụ: Lâm Khuyết là phàm nhân bị tàn phế chân trái, trốn chạy trong mạng lưới đường ngầm ga Quảng Nam cũ, phải săn tìm Nhựa Độc Đinh Hương..."
+                placeholder="Ví dụ: Tiêu Hàn là phàm nhân bị rách gân gót chân phải, ẩn nấp trong phế tích lò phản ứng hạt nhân Ninh Thuận cũ, sở hữu chiếc bật lửa đồng rỉ sét và phải tìm mọi cách vượt qua sự lùng sục gắt gao của Drone Săn Mồi Độc Lập..."
               />
             </div>
 
@@ -383,6 +417,116 @@ export default function Home() {
                       {ch.number}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* CHỈ SỐ SINH TỒN HUD */}
+              <div className="border border-zinc-900 rounded-lg p-4 bg-zinc-950/40 space-y-3">
+                <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">📊 TÀI NGUYÊN SINH TỒN</span>
+                <div className="grid grid-cols-2 gap-3">
+                  
+                  {/* Nước */}
+                  <div className="bg-zinc-950 border border-zinc-900 rounded p-2 flex flex-col justify-between">
+                    <div className="flex justify-between items-center text-[10px] font-mono mb-1">
+                      <span className="text-blue-400">💧 NƯỚC</span>
+                      <span className="font-bold text-zinc-300">{store.water}%</span>
+                    </div>
+                    <div className="w-full bg-zinc-900 rounded-full h-1.5 mb-1.5 overflow-hidden">
+                      <div className="bg-blue-500 h-full transition-all duration-300" style={{ width: `${store.water}%` }}></div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        type="button" 
+                        onClick={() => store.setWater(Math.max(0, store.water - 10))}
+                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        -10%
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => store.setWater(Math.min(100, store.water + 10))}
+                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        +10%
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Lương thực */}
+                  <div className="bg-zinc-950 border border-zinc-900 rounded p-2 flex flex-col justify-between">
+                    <div className="flex justify-between items-center text-[10px] font-mono mb-1">
+                      <span className="text-amber-500">🍞 LƯƠNG THỰC</span>
+                      <span className="font-bold text-zinc-300">{store.food}%</span>
+                    </div>
+                    <div className="w-full bg-zinc-900 rounded-full h-1.5 mb-1.5 overflow-hidden">
+                      <div className="bg-amber-600 h-full transition-all duration-300" style={{ width: `${store.food}%` }}></div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        type="button" 
+                        onClick={() => store.setFood(Math.max(0, store.food - 10))}
+                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        -10%
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => store.setFood(Math.min(100, store.food + 10))}
+                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        +10%
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Đạn dược */}
+                  <div className="bg-zinc-950 border border-zinc-900 rounded p-2 flex flex-col justify-between">
+                    <div className="flex justify-between items-center text-[10px] font-mono mb-1">
+                      <span className="text-red-400">🔫 ĐẠN DƯỢC</span>
+                      <span className="font-bold text-zinc-300">{store.ammo} viên</span>
+                    </div>
+                    <div className="flex items-center gap-1 mt-1">
+                      <button 
+                        type="button" 
+                        onClick={() => store.setAmmo(Math.max(0, store.ammo - 1))}
+                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        -1 viên
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => store.setAmmo(store.ammo + 1)}
+                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        +1 viên
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Dây rút */}
+                  <div className="bg-zinc-950 border border-zinc-900 rounded p-2 flex flex-col justify-between">
+                    <div className="flex justify-between items-center text-[10px] font-mono mb-1">
+                      <span className="text-emerald-400">⛓️ DÂY RÚT</span>
+                      <span className="font-bold text-zinc-300">{store.cableTies} sợi</span>
+                    </div>
+                    <div className="flex items-center gap-1 mt-1">
+                      <button 
+                        type="button" 
+                        onClick={() => store.setCableTies(Math.max(0, store.cableTies - 1))}
+                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        -1 sợi
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => store.setCableTies(store.cableTies + 1)}
+                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        +1 sợi
+                      </button>
+                    </div>
+                  </div>
+
                 </div>
               </div>
 
@@ -480,6 +624,83 @@ export default function Home() {
                             ))}
                           </ul>
                         )}
+                      </div>
+
+                      {/* INJURY TRACKER PANEL */}
+                      <div className="border border-zinc-900 rounded bg-zinc-950/50 p-3 space-y-3">
+                        <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wide block">🩹 SỔ RÁCH CƠ THỂ (INJURY TRACKER)</span>
+                        
+                        {/* List of current injuries */}
+                        {store.injuries.length === 0 ? (
+                          <p className="text-xs text-zinc-600 italic">Chưa ghi nhận chấn thương vật lý nào.</p>
+                        ) : (
+                          <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                            {store.injuries.map((inj) => (
+                              <div key={inj.id} className="bg-[#0c0c0c] border border-zinc-900 rounded p-2 text-[11px] flex items-start justify-between gap-2 shadow-sm">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-red-400">📍 {inj.part}</span>
+                                    <span className={`px-1.5 py-0.5 rounded-[3px] text-[9px] font-mono font-bold ${
+                                      inj.pain >= 8 ? 'bg-red-950/50 border border-red-900/40 text-red-500' :
+                                      inj.pain >= 5 ? 'bg-amber-950/50 border border-amber-900/40 text-amber-500' :
+                                      'bg-zinc-900 border border-zinc-800 text-zinc-400'
+                                    }`}>
+                                      Đau: {inj.pain}/10
+                                    </span>
+                                  </div>
+                                  <p className="text-zinc-400"><span className="text-zinc-500 font-medium">Hậu quả:</span> {inj.consequence}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => store.removeInjury(inj.id)}
+                                  className="text-zinc-600 hover:text-red-500 transition-colors p-1 cursor-pointer"
+                                  title="Xóa vết thương"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Add new injury form */}
+                        <div className="border-t border-zinc-900 pt-2.5 mt-2 space-y-2">
+                          <span className="text-[9.5px] font-mono font-bold text-zinc-500 uppercase tracking-wider block">Thêm chấn thương mới</span>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <input 
+                              type="text"
+                              required
+                              placeholder="Bộ phận"
+                              className="col-span-2 bg-zinc-950 border border-zinc-900 rounded p-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 placeholder-zinc-700"
+                              value={newInjuryPart}
+                              onChange={(e) => setNewInjuryPart(e.target.value)}
+                            />
+                            <select
+                              className="bg-zinc-950 border border-zinc-900 rounded p-1.5 text-[11px] text-zinc-300 focus:outline-none focus:border-zinc-800"
+                              value={newInjuryPain}
+                              onChange={(e) => setNewInjuryPain(parseInt(e.target.value))}
+                            >
+                              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                <option key={n} value={n}>Đau: {n}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <input 
+                            type="text"
+                            required
+                            placeholder="Ví dụ: Khập khiễng không thể chạy"
+                            className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 placeholder-zinc-700"
+                            value={newInjuryConsequence}
+                            onChange={(e) => setNewInjuryConsequence(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => handleAddInjurySubmit(e)}
+                            className="w-full py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-xs font-bold text-zinc-300 hover:text-white transition-all cursor-pointer text-center"
+                          >
+                            🩹 Thêm Chấn Thương
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}

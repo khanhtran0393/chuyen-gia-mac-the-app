@@ -150,11 +150,115 @@ export const useNovelStore = create((set, get) => {
     minWordCount: 3910,
     maxWordCount: 4590,
 
+    // 5. Survival Resources & Injury Tracker
+    water: 100,
+    food: 100,
+    ammo: 6,
+    cableTies: 10,
+    injuries: [],
+
     // Actions
     setTheme: (theme) => set({ theme }),
     setStyle: (style) => set({ style }),
     setPrompt: (prompt) => set({ prompt }),
     setNovelTitle: (novelTitle) => set({ novelTitle }),
+    
+    setWater: (water) => set({ water }),
+    setFood: (food) => set({ food }),
+    setAmmo: (ammo) => set({ ammo }),
+    setCableTies: (cableTies) => set({ cableTies }),
+    
+    addInjury: (injury) => set((state) => ({ 
+      injuries: [...state.injuries, { id: Date.now(), ...injury }] 
+    })),
+    removeInjury: (id) => set((state) => ({ 
+      injuries: state.injuries.filter(inj => inj.id !== id) 
+    })),
+    setInjuries: (injuries) => set({ injuries }),
+    
+    generateAIPrompt: () => {
+      const names = ["Tiêu Hàn", "Thạch Dã", "Dạ Vô Cực", "Lục Phong", "Tề Lăng", "Mộ Dung Triệt", "Uất Trì Hoằng", "Khương Dịch", "Tần Mộ", "Lôi Chiến"];
+      const defects = [
+        "bị rách gân gót chân phải",
+        "mù mắt trái do bụi phóng xạ",
+        "liệt cánh tay trái sau một cuộc phục kích",
+        "nứt 3 xương sườn số 4, 5, 6",
+        "cụt ngón áp út trên tay bắn súng",
+        "hỏng phế nang phổi phải gây hít thở khò khè",
+        "tổn thương tủy sống khiến chân đi khập khiễng",
+        "mất hoàn toàn thính giác bên tai phải"
+      ];
+      const locations = [
+        "phế tích lò phản ứng hạt nhân Ninh Thuận cũ chứa sương vàng độc hại",
+        "tàn tích ga tàu điện cũ dưới lòng đất ngập ngụa nước đen và nấm rữa",
+        "hầm trú ẩn quân sự số 99 đổ sập nằm sâu dưới lòng cát sa mạc",
+        "nhà máy hóa chất sinh học hoang phế có sương mù xanh lam bao phủ",
+        "trạm rada quân sự bỏ hoang trên đỉnh Ba Vì gầm rú",
+        "tàn tích viện nghiên cứu đột biến gen hoang tàn bị dây leo biến dị phủ kín",
+        "bãi nghĩa địa xe bọc thép rỉ sét ở sa mạc muối trắng Ninh Hòa"
+      ];
+      const items = [
+        "chiếc bật lửa đồng rỉ sét chứa ít xăng cặn",
+        "bình nước vỏ sắt cũ kỹ móp méo",
+        "chiếc kính một tròng nứt dọc che mắt mù",
+        "la bàn cơ khí cổ lỗ có kim chỉ loạn xạ",
+        "mặt nạ phòng độc rách một góc màng lọc",
+        "bộ dây siết cáp nhựa tự chế dài 2 mét"
+      ];
+      const threats = [
+        "sự lùng sục gắt gao của Drone Săn Mồi Độc Lập phát tia laser đỏ quét qua vách đá",
+        "những xúc tu gai nhọn đầy chất dịch độc của Nhựa Độc Đinh Hương rủ xuống trần",
+        "sự bám đuổi đói khát chập chờn của đàn Sói Xương Xám đột biến",
+        "tiếng hồng hộc săn mồi đầy hung bạo của Lợn Rừng Bọc Thép ngoài cửa hầm",
+        "tiếng vo ve tần số cực thấp nhức óc của bầy Ký Sinh Sợi Chỉ đang lơ lửng trong không khí"
+      ];
+
+      const name = names[Math.floor(Math.random() * names.length)];
+      const defect = defects[Math.floor(Math.random() * defects.length)];
+      const location = locations[Math.floor(Math.random() * locations.length)];
+      const item = items[Math.floor(Math.random() * items.length)];
+      const threat = threats[Math.floor(Math.random() * threats.length)];
+
+      const generated = `${name} là một phàm nhân sinh tồn kiên cường nhưng ${defect}, hiện đang ẩn nấp đơn độc trong ${location}. Anh sở hữu ${item} và phải tìm mọi cách vượt qua ${threat} để thu thập tài nguyên nước sạch duy trì mạng sống.`;
+      
+      set({ prompt: generated });
+    },
+
+    syncStateJson: (text) => {
+      if (!text) return text;
+      
+      const stateJsonMatch = text.match(/```(?:STATE_JSON|json)?\s*({\s*"fatigue"[\s\S]*?})\s*```/i) 
+                          || text.match(/```STATE_JSON\s*([\s\S]*?)\s*```/i);
+                          
+      if (stateJsonMatch && stateJsonMatch[1]) {
+        try {
+          const data = JSON.parse(stateJsonMatch[1].trim());
+          const updates = {};
+          
+          if (typeof data.fatigue === 'number') updates.fatigue = data.fatigue;
+          if (typeof data.toxin === 'number') updates.toxin = data.toxin;
+          if (typeof data.water === 'number') updates.water = data.water;
+          if (typeof data.food === 'number') updates.food = data.food;
+          if (typeof data.ammo === 'number') updates.ammo = data.ammo;
+          if (typeof data.cableTies === 'number') updates.cableTies = data.cableTies;
+          
+          if (Array.isArray(data.injuries)) {
+            updates.injuries = data.injuries.map((inj, idx) => ({ 
+              id: Date.now() + idx, 
+              part: inj.part || "Chưa rõ bộ phận", 
+              pain: typeof inj.pain === 'number' ? inj.pain : 5, 
+              consequence: inj.consequence || "Không rõ hậu quả" 
+            }));
+          }
+          
+          set(updates);
+          return text.replace(stateJsonMatch[0], "").trim();
+        } catch (e) {
+          console.error("Lỗi giải mã STATE_JSON từ AI: ", e);
+        }
+      }
+      return text;
+    },
     
     // Setters cho các cải tiến mới
     setApiKeys: (keys) => {
@@ -256,6 +360,11 @@ export const useNovelStore = create((set, get) => {
       stampWeavingPassed: false,
       minWordCount: 3910,
       maxWordCount: 4590,
+      water: 100,
+      food: 100,
+      ammo: 6,
+      cableTies: 10,
+      injuries: [],
     }),
 
     // Quét tìm vật dụng chữ ký trong văn bản sinh ra
@@ -436,9 +545,12 @@ export const useNovelStore = create((set, get) => {
           set({ displayedText: accumulatedText });
         }
 
+        // Đồng bộ và bóc tách khối STATE_JSON nếu có
+        const cleanedText = get().syncStateJson(accumulatedText);
+
         // Tự động phân tích các thông số từ Dàn Ý được sinh ra để cập nhật Title và nhân vật
         let novelName = "NGHỊCH LÝ VONG XUYÊN";
-        const titleMatch = accumulatedText.match(/(?:TÊN TRUYỆN|TÊN KỊCH BẢN|Tên tác phẩm):\s*\*\*?([^\*\n]+)\*\*?/i);
+        const titleMatch = cleanedText.match(/(?:TÊN TRUYỆN|TÊN KỊCH BẢN|Tên tác phẩm):\s*\*\*?([^\*\n]+)\*\*?/i);
         if (titleMatch && titleMatch[1]) {
           novelName = titleMatch[1].trim();
         }
@@ -462,7 +574,8 @@ export const useNovelStore = create((set, get) => {
             { name: "Đồng Hành Chí Cốt", desc: "Hỗ trợ tác chiến vật lý và cung cấp vật tư hậu cần." },
             { name: "Thực Thể Săn Mồi", desc: "Quái vật thuộc tầng sinh thái đang ẩn nấp trong khu vực." }
           ],
-          outlineText: accumulatedText,
+          outlineText: cleanedText,
+          displayedText: cleanedText,
           chapters,
           isGeneratingOutline: false,
           outlineGenerated: true,
@@ -482,7 +595,7 @@ export const useNovelStore = create((set, get) => {
     writeActiveChapter: async () => {
       const { 
         activeChapterIndex, chapters, theme, style,
-        fatigue, toxin, 
+        fatigue, toxin, water, food, ammo, cableTies, injuries,
         geniusGoal, geniusConstraints, geniusPrep, geniusOps, geniusParadox, geniusCost,
         trophicLevel, selectedMonster, monsterCues,
         signatureProps,
@@ -508,6 +621,11 @@ export const useNovelStore = create((set, get) => {
         return false;
       }).map(m => m.move);
 
+      // Thêm chấn thương vật lý từ Injury Tracker vào Forbidden Moves
+      injuries.forEach(inj => {
+        forbidden.push(`Bị thương ở ${inj.part} (Độ đau ${inj.pain}/10): ${inj.consequence}`);
+      });
+
       const requestBody = {
         requestType: "WRITE_CHAPTER",
         selectedChapter: ch.number,
@@ -524,7 +642,12 @@ export const useNovelStore = create((set, get) => {
           forbiddenMoves: forbidden,
           trophicLevel,
           selectedMonster,
-          monsterCues
+          monsterCues,
+          water,
+          food,
+          ammo,
+          cableTies,
+          injuries: injuries.map(inj => ({ part: inj.part, pain: inj.pain, consequence: inj.consequence }))
         },
         geniusBeat: {
           goal: geniusGoal,
@@ -570,19 +693,26 @@ export const useNovelStore = create((set, get) => {
           calculateWordCount(accumulatedText);
         }
 
-        // Cập nhật trạng thái chương đã viết xong
+        // Cập nhật trạng thái chương đã viết xong sau khi bóc tách STATE_JSON
+        const cleanedText = get().syncStateJson(accumulatedText);
+
         const updatedChapters = [...chapters];
         updatedChapters[activeChapterIndex] = {
           ...ch,
-          content: accumulatedText,
+          content: cleanedText,
           written: true
         };
 
         set({
+          displayedText: cleanedText,
           chapters: updatedChapters,
           isWritingChapter: false,
           isStreaming: false
         });
+
+        // Cập nhật số lượng từ và props dựa trên văn bản đã làm sạch
+        scanSignatureProps(cleanedText);
+        calculateWordCount(cleanedText);
 
       } catch (err) {
         console.error("Lỗi đọc stream chương truyện: ", err);
