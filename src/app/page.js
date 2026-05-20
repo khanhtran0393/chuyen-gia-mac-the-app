@@ -23,6 +23,11 @@ export default function Home() {
   const [newCharGoal, setNewCharGoal] = useState("");
   const [newCharFear, setNewCharFear] = useState("");
 
+  // Trigger manual rehydration on mount to avoid Next.js hydration mismatch
+  useEffect(() => {
+    useNovelStore.persist.rehydrate();
+  }, []);
+
   // Setup Word Gate Default targets when component mounts
   useEffect(() => {
     if (store.minWordCount === 0 || store.maxWordCount === 0) {
@@ -71,6 +76,19 @@ export default function Home() {
   const handleWriteChapter = () => {
     if (store.isGeneratingOutline || store.isWritingChapter) return;
     store.writeActiveChapter();
+  };
+
+  // Commit Memory and advance to next chapter
+  const handleCommitAndNext = () => {
+    const nextIdx = store.activeChapterIndex + 1;
+    if (nextIdx < store.danh_muc_chuong.length) {
+      store.setActiveChapterIndex(nextIdx);
+      store.selectChapter(nextIdx);
+      store.setPipelineStep(4);
+    } else {
+      alert("🎉 Chúc mừng! Bạn đã hoàn thành việc viết và ghi sổ ký ức cho toàn bộ các tập kịch bản!");
+      store.setPipelineStep(4);
+    }
   };
 
   // Export Entire Novel script as a text file
@@ -267,16 +285,17 @@ export default function Home() {
             { step: 1, label: "Ý TƯỞNG CORE" },
             { step: 2, label: "DÀN Ý TỔNG THỂ (GATE 1)" },
             { step: 3, label: "HỒ SƠ NHÂN VẬT (GATE 2)" },
-            { step: 4, label: "KỊCH BẢN TẬP CHI TIẾT" }
+            { step: 4, label: "KỊCH BẢN TẬP CHI TIẾT" },
+            { step: 5, label: "BẢN ĐỒ KÝ ỨC (MEMORY)" }
           ].map((s) => (
             <React.Fragment key={s.step}>
               <button
                 onClick={() => {
-                  if (s.step < store.pipelineStep && !store.isGeneratingOutline && !store.isWritingChapter) {
+                  if (s.step < store.pipelineStep && !store.isGeneratingOutline && !store.isWritingChapter && !store.isCommittingMemory) {
                     store.setPipelineStep(s.step);
                   }
                 }}
-                disabled={s.step > store.pipelineStep || store.isGeneratingOutline || store.isWritingChapter}
+                disabled={s.step > store.pipelineStep || store.isGeneratingOutline || store.isWritingChapter || store.isCommittingMemory}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded transition-all border ${
                   store.pipelineStep === s.step
                     ? "bg-orange-600/15 text-orange-400 font-extrabold border-orange-500/40 shadow-md shadow-orange-950/5 scale-105"
@@ -296,7 +315,7 @@ export default function Home() {
                 </span>
                 <span>{s.label}</span>
               </button>
-              {s.step < 4 && <span className="text-zinc-800 font-bold hidden md:inline">➔</span>}
+              {s.step < 5 && <span className="text-zinc-800 font-bold hidden md:inline">➔</span>}
             </React.Fragment>
           ))}
         </div>
@@ -1000,6 +1019,15 @@ export default function Home() {
                     </>
                   )}
 
+                  {activeChapter?.da_viet && !store.isWritingChapter && (
+                    <button
+                      onClick={() => store.commitMemory()}
+                      className="px-4 py-1.5 rounded bg-amber-650 hover:bg-amber-655 text-white font-extrabold text-[10.5px] uppercase tracking-wider cursor-pointer flex items-center gap-1 shadow-lg shadow-amber-950/30 animate-pulse transition-all"
+                    >
+                      🧠 GHI SỔ & NÉN KÝ ỨC
+                    </button>
+                  )}
+
                   <button
                     onClick={handleWriteChapter}
                     disabled={store.isWritingChapter || store.isGeneratingOutline}
@@ -1094,6 +1122,198 @@ export default function Home() {
 
             </section>
 
+          </div>
+        )}
+
+        {/* ==================== BƯỚC 5: BẢN ĐỒ KÝ ỨC (MEMORY COMMIT) ==================== */}
+        {store.pipelineStep === 5 && (
+          <div className="flex-1 overflow-y-auto px-6 py-8 select-text">
+            <div className="max-w-6xl mx-auto space-y-6">
+              
+              <header className="flex flex-col md:flex-row md:items-center justify-between border-b border-zinc-900 pb-5 gap-4">
+                <div>
+                  <span className="inline-block text-[10px] font-mono font-bold text-amber-500 bg-amber-950/30 border border-amber-900/30 px-2 py-0.5 rounded mb-2 animate-pulse">
+                    STEP 5: MEMORY WORKSPACE & ROLLING COMPRESSION
+                  </span>
+                  <h2 className="text-2xl font-black text-white uppercase tracking-tight font-heading">
+                    🧠 BẢN ĐỒ KÝ ỨC & NÉN BỘ NHỚ CUỐN CHIẾU
+                  </h2>
+                  <p className="text-zinc-500 text-xs mt-1 leading-relaxed max-w-2xl font-medium">
+                    Tại bước này, AI sẽ phân tích kịch bản của chương vừa chốt, cập nhật chấn thương/sổ rách cơ thể, dệt lại các vật phẩm mang theo, mở khóa địa danh mới và nén cốt truyện cuốn chiếu để chuẩn bị viết chương tiếp theo mà không bị ảo giác LLM.
+                  </p>
+                </div>
+                
+                <div>
+                  {store.isCommittingMemory ? (
+                    <span className="text-xs text-amber-500 animate-pulse font-mono font-bold bg-amber-950/20 border border-amber-900/30 px-4 py-2 rounded inline-flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></span>
+                      AI đang nén ký ức cuốn chiếu...
+                    </span>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => store.commitMemory()}
+                        className="px-4 py-2 text-xs font-bold rounded bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-450 hover:text-white transition-colors cursor-pointer"
+                      >
+                        🔄 Chạy Lại Nén Ký Ức
+                      </button>
+                      <button
+                        onClick={handleCommitAndNext}
+                        className="px-5 py-2.5 rounded bg-emerald-600 hover:bg-emerald-500 font-extrabold text-xs text-white uppercase tracking-wider cursor-pointer shadow-lg shadow-emerald-950/30"
+                      >
+                        🔒 CHỐT KÝ ỨC & VIẾT TẬP TIẾP THEO
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </header>
+
+              {/* Console Logs Terminal Panel */}
+              <div className="bg-[#07070a] border border-zinc-850/60 rounded-xl overflow-hidden shadow-2xl">
+                <div className="h-9 px-4 bg-zinc-950 border-b border-zinc-900 flex items-center justify-between select-none">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500/80"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-500/80"></span>
+                    <span className="text-[10px] font-mono text-zinc-550 font-bold ml-2">MEMORY_COMPRESSION_LOGS.EXE</span>
+                  </div>
+                  <span className="text-[9px] font-mono text-amber-500 font-extrabold tracking-wider animate-pulse">● PIPELINE RUNNING</span>
+                </div>
+                <div className="p-5 font-mono text-xs text-zinc-350 leading-relaxed max-h-72 overflow-y-auto bg-zinc-950/30 selection:bg-orange-500/20" ref={renderedTextRef}>
+                  <MarkdownBody text={store.displayedText} isStreaming={store.isCommittingMemory} />
+                </div>
+              </div>
+
+              {/* 3-Tier Visualizations Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Tier 1: Lorebook */}
+                <div className="bg-[#0b0b0d] border border-zinc-900 rounded-xl p-5 space-y-4 shadow-md">
+                  <div className="border-b border-zinc-900 pb-2 flex items-center gap-2">
+                    <span className="text-lg">🛡️</span>
+                    <div>
+                      <h3 className="font-extrabold text-xs text-white uppercase font-mono">Tầng 1: Lõi Bất Biến (Lorebook)</h3>
+                      <p className="text-[9.5px] text-zinc-550 font-mono">Định luật thép & cảnh quan mở khóa</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 text-xs font-sans">
+                    <div>
+                      <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Quy tắc sinh tồn thép</span>
+                      <ul className="space-y-1.5">
+                        {store.lorebook_the_gioi?.quy_tac_sinh_ton?.map((rule, i) => (
+                          <li key={i} className="flex gap-2 items-start text-zinc-400 bg-zinc-950/50 p-2 border border-zinc-900/60 rounded">
+                            <span className="text-orange-500 text-[10px] mt-0.5">●</span>
+                            <span>{rule}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Địa danh đã mở khóa</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {store.lorebook_the_gioi?.dia_diem_da_mo_khoa?.map((loc, i) => (
+                          <span key={i} className="px-2.5 py-1 text-[10.5px] font-medium rounded bg-[#101015] border border-zinc-800 text-zinc-350">
+                            📍 {loc}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tier 2: Dynamic Characters */}
+                <div className="bg-[#0b0b0d] border border-zinc-900 rounded-xl p-5 space-y-4 shadow-md lg:col-span-2 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <div className="border-b border-zinc-900 pb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🎒</span>
+                        <div>
+                          <h3 className="font-extrabold text-xs text-white uppercase font-mono">Tầng 2: Rolling Memory (Sổ Rách & Hành Trang)</h3>
+                          <p className="text-[9.5px] text-zinc-550 font-mono">Thuộc tính thể chất & tóm tắt cuốn chiếu</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      {/* Character Dynamic Statuses */}
+                      <div className="space-y-3">
+                        <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider block border-b border-zinc-900 pb-1">Hồ sơ thể chất biến đổi</span>
+                        <div className="space-y-3">
+                          {store.bo_nho_nhan_vat?.map((nv, i) => (
+                            <div key={i} className="p-3.5 bg-zinc-950/60 border border-zinc-900/80 rounded-lg space-y-2">
+                              <h4 className="font-black text-white text-xs flex items-center justify-between">
+                                <span>{nv.ten}</span>
+                                <span className="text-[8px] font-mono text-zinc-500">MEMBER #{i+1}</span>
+                              </h4>
+                              <div className="space-y-1.5 font-sans leading-relaxed text-zinc-400">
+                                <div>
+                                  <span className="text-[8.5px] text-zinc-550 block font-mono">TÌNH TRẠNG THỂ CHẤT / CHẤN THƯƠNG HIỆN TẠI</span>
+                                  <textarea
+                                    className="w-full bg-zinc-950 border border-zinc-900/60 rounded p-1 text-[11.5px] focus:outline-none focus:border-zinc-800 resize-none h-11"
+                                    value={nv.tinh_trang_hien_tai}
+                                    onChange={(e) => {
+                                      const updatedList = [...store.bo_nho_nhan_vat];
+                                      updatedList[i].tinh_trang_hien_tai = e.target.value;
+                                      store.set({ bo_nho_nhan_vat: updatedList });
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <span className="text-[8.5px] text-zinc-550 block font-mono">VẬT DỤNG ĐANG MANG TRÊN NGƯỜI</span>
+                                  <input
+                                    type="text"
+                                    className="w-full bg-zinc-950 border border-zinc-900/60 rounded p-1 text-[11.5px] focus:outline-none focus:border-zinc-800"
+                                    value={Array.isArray(nv.vat_dung_dang_mang) ? nv.vat_dung_dang_mang.join(', ') : nv.vat_dung_dang_mang || ''}
+                                    onChange={(e) => {
+                                      const updatedList = [...store.bo_nho_nhan_vat];
+                                      updatedList[i].vat_dung_dang_mang = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                      store.set({ bo_nho_nhan_vat: updatedList });
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Cumulative Rolling Summary */}
+                      <div className="space-y-2">
+                        <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider block border-b border-zinc-900 pb-1">Tóm tắt nén cốt truyện cuốn chiếu</span>
+                        <textarea
+                          className="w-full h-[245px] p-3 bg-zinc-950/60 border border-zinc-900 rounded-lg text-[11.5px] leading-relaxed text-zinc-400 font-mono placeholder-zinc-800 focus:outline-none resize-none focus:border-zinc-850"
+                          value={store.tom_tat_cuon_chieu}
+                          onChange={(e) => store.set({ tom_tat_cuon_chieu: e.target.value })}
+                          placeholder="Bản nén cốt truyện cuốn chiếu từ tập 1..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tier 3: Short-term Context */}
+                  <div className="border-t border-zinc-900 pt-4 mt-2">
+                    <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider block mb-2">Tầng 3: Lịch sử 3 chương gần nhất (Trí nhớ ngắn hạn)</span>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {store.chuong_gan_nhat?.map((ch, i) => (
+                        <div key={i} className="p-3 bg-[#0d0d0f] border border-zinc-900 rounded text-[11px] leading-relaxed">
+                          <span className="text-orange-500 font-mono font-bold block mb-1">Chương {ch.chuong}</span>
+                          <p className="text-zinc-450 line-clamp-3">{ch.noi_dung_tom_luoc}</p>
+                        </div>
+                      ))}
+                      {(!store.chuong_gan_nhat || store.chuong_gan_nhat.length === 0) && (
+                        <div className="md:col-span-3 text-center text-zinc-650 text-xs italic py-2">
+                          Chưa có ghi chép ngắn hạn (Chỉ lưu sau khi nén ký ức chương).
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
           </div>
         )}
 

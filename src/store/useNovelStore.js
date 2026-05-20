@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export const TROPHIC_WEB = {
   1: {
@@ -68,7 +69,9 @@ export const FORBIDDEN_MOVES = [
   { minToxin: 80, move: "Ngất lịm tạm thời nếu vận động quá mạnh trong 5 phút" }
 ];
 
-export const useNovelStore = create((set, get) => {
+export const useNovelStore = create(
+  persist(
+    (set, get) => {
   // Tránh lỗi SSR khi đọc localStorage
   const getStoredApiKeys = () => {
     if (typeof window !== 'undefined') {
@@ -138,6 +141,36 @@ export const useNovelStore = create((set, get) => {
     dan_y_tong_the: { mo_dau: "", cao_trao: "", ket_thuc: "" },
     danh_sach_nhan_vat: [],
     danh_muc_chuong: [],
+
+    // 3 Tiers of Memory
+    lorebook_the_gioi: {
+      quy_tac_sinh_ton: [
+        "Không được nín thở quá 20s",
+        "Quái T4 phản ứng với kim loại",
+        "Không ăn nấm bào tử lam khi chưa sấy khô",
+        "Drone săn mồi đổi nhịp quét laser mỗi 5 giây"
+      ],
+      dia_diem_da_mo_khoa: [
+        "Trạm phát sóng hỏng",
+        "Rãnh xả kiềm",
+        "Ga tàu điện cũ dưới lòng đất"
+      ]
+    },
+    bo_nho_nhan_vat: [
+      {
+        ten: "Tiêu Hàn",
+        tinh_trang_hien_tai: "Liệt hoàn toàn cánh tay trái do sương vàng ăn mòn",
+        vat_dung_dang_mang: ["Bật lửa đồng", "Bình nước vỏ sắt móp méo", "Kính một tròng nứt"]
+      },
+      {
+        ten: "Thạch Dã",
+        tinh_trang_hien_tai: "Bị rách gân gót chân phải đi khập khiễng",
+        vat_dung_dang_mang: ["La bàn cơ khí", "Bộ dây siết cáp nhựa 2 mét"]
+      }
+    ],
+    tom_tat_cuon_chieu: "Khởi đầu cuộc hành trình sinh tồn mạt thế khốc liệt.",
+    chuong_gan_nhat: [],
+    isCommittingMemory: false,
 
     // Active chapter controls
     activeChapterIndex: 0,
@@ -253,7 +286,7 @@ export const useNovelStore = create((set, get) => {
     syncStateJson: (text) => {
       if (!text) return text;
       
-      const stateJsonMatch = text.match(/```(?:STATE_JSON|json)?\s*({\s*"(?:fatigue|con_tro|dan_y_tong_the|danh_sach_nhan_vat|danh_muc_chuong)"[\s\S]*?})\s*```/i) 
+      const stateJsonMatch = text.match(/```(?:STATE_JSON|json)?\s*({\s*"(?:fatigue|con_tro|dan_y_tong_the|danh_sach_nhan_vat|danh_muc_chuong|lorebook_the_gioi|bo_nho_nhan_vat|tom_tat_cuon_chieu|chuong_gan_nhat)"[\s\S]*?})\s*```/i) 
                           || text.match(/```STATE_JSON\s*([\s\S]*?)\s*```/i);
                           
       if (stateJsonMatch && stateJsonMatch[1]) {
@@ -261,7 +294,20 @@ export const useNovelStore = create((set, get) => {
           const data = JSON.parse(stateJsonMatch[1].trim());
           const updates = {};
           
-          // --- HỖ TRỢ ĐỊNH DẠNG TIẾNG VIỆT MỚI (STORY MEMORY) ---
+          // --- HỖ TRỢ ĐỊNH DẠNG TIẾNG VIỆT MỚI (STORY MEMORY & RAG) ---
+          if (data.lorebook_the_gioi) {
+            updates.lorebook_the_gioi = data.lorebook_the_gioi;
+          }
+          if (data.bo_nho_nhan_vat) {
+            updates.bo_nho_nhan_vat = data.bo_nho_nhan_vat;
+          }
+          if (typeof data.tom_tat_cuon_chieu === 'string') {
+            updates.tom_tat_cuon_chieu = data.tom_tat_cuon_chieu;
+          }
+          if (Array.isArray(data.chuong_gan_nhat)) {
+            updates.chuong_gan_nhat = data.chuong_gan_nhat;
+          }
+
           if (data.con_tro) {
             if (typeof data.con_tro.chuong_hien_tai === 'number') {
               updates.activeChapterIndex = data.con_tro.chuong_hien_tai - 1;
@@ -754,56 +800,95 @@ Dưới đây là hồ sơ nhân vật tĩnh đã được bóc tách tự độ
       danh_sach_nhan_vat: state.danh_sach_nhan_vat.filter(nv => nv.ten !== ten)
     })),
 
-    reset: () => set({
-      pipelineStep: 1,
-      outlineBranches: ["", "", ""],
-      activeOutlineBranch: 0,
-      selectedBranchGenerated: [false, false, false],
-      isExtractingCharacters: false,
-      charactersExtracted: false,
-      scratchpad: "",
-      
-      dan_y_tong_the: { mo_dau: "", cao_trao: "", ket_thuc: "" },
-      danh_sach_nhan_vat: [],
-      danh_muc_chuong: [],
+    reset: () => {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('chuyen_gia_mac_the_store');
+        } catch (e) {
+          console.error("Lỗi xóa localStorage:", e);
+        }
+      }
+      set({
+        pipelineStep: 1,
+        outlineBranches: ["", "", ""],
+        activeOutlineBranch: 0,
+        selectedBranchGenerated: [false, false, false],
+        isExtractingCharacters: false,
+        charactersExtracted: false,
+        scratchpad: "",
+        
+        dan_y_tong_the: { mo_dau: "", cao_trao: "", ket_thuc: "" },
+        danh_sach_nhan_vat: [],
+        danh_muc_chuong: [],
 
-      phase: 1,
-      novelTitle: "",
-      isGeneratingOutline: false,
-      outlineGenerated: false,
-      activeTab: "outline",
-      worldBackground: "",
-      characters: [],
-      outlineText: "",
-      chapters: [],
-      activeChapterIndex: 0,
-      isWritingChapter: false,
-      displayedText: "",
-      isStreaming: false,
-      rotationMessage: "",
-      fatigue: 20,
-      toxin: 10,
-      geniusGoal: "",
-      geniusConstraints: "",
-      geniusPrep: "",
-      geniusOps: "",
-      geniusParadox: "",
-      geniusCost: "",
-      trophicLevel: 1,
-      selectedMonster: "Nhựa Độc Đinh Hương",
-      monsterCues: "Mùi mật ngọt lợ ngào ngạt, không khí lạnh buốt bất chợt, thân cây có dịch đen chảy",
-      detectedProps: [],
-      wordCount: 0,
-      wordGatePassed: false,
-      stampWeavingPassed: false,
-      minWordCount: 3910,
-      maxWordCount: 4590,
-      water: 100,
-      food: 100,
-      ammo: 6,
-      cableTies: 10,
-      injuries: [],
-    }),
+        phase: 1,
+        novelTitle: "",
+        isGeneratingOutline: false,
+        outlineGenerated: false,
+        activeTab: "outline",
+        worldBackground: "",
+        characters: [],
+        outlineText: "",
+        chapters: [],
+        activeChapterIndex: 0,
+        isWritingChapter: false,
+        displayedText: "",
+        isStreaming: false,
+        rotationMessage: "",
+        fatigue: 20,
+        toxin: 10,
+        geniusGoal: "",
+        geniusConstraints: "",
+        geniusPrep: "",
+        geniusOps: "",
+        geniusParadox: "",
+        geniusCost: "",
+        trophicLevel: 1,
+        selectedMonster: "Nhựa Độc Đinh Hương",
+        monsterCues: "Mùi mật ngọt lợ ngào ngạt, không khí lạnh buốt bất chợt, thân cây có dịch đen chảy",
+        detectedProps: [],
+        wordCount: 0,
+        wordGatePassed: false,
+        stampWeavingPassed: false,
+        minWordCount: 3910,
+        maxWordCount: 4590,
+        water: 100,
+        food: 100,
+        ammo: 6,
+        cableTies: 10,
+        injuries: [],
+
+        // Reset 3 Tiers of Memory
+        lorebook_the_gioi: {
+          quy_tac_sinh_ton: [
+            "Không được nín thở quá 20s",
+            "Quái T4 phản ứng với kim loại",
+            "Không ăn nấm bào tử lam khi chưa sấy khô",
+            "Drone săn mồi đổi nhịp quét laser mỗi 5 giây"
+          ],
+          dia_diem_da_mo_khoa: [
+            "Trạm phát sóng hỏng",
+            "Rãnh xả kiềm",
+            "Ga tàu điện cũ dưới lòng đất"
+          ]
+        },
+        bo_nho_nhan_vat: [
+          {
+            ten: "Tiêu Hàn",
+            tinh_trang_hien_tai: "Liệt hoàn toàn cánh tay trái do sương vàng ăn mòn",
+            vat_dung_dang_mang: ["Bật lửa đồng", "Bình nước vỏ sắt móp méo", "Kính một tròng nứt"]
+          },
+          {
+            ten: "Thạch Dã",
+            tinh_trang_hien_tai: "Bị rách gân gót chân phải đi khập khiễng",
+            vat_dung_dang_mang: ["La bàn cơ khí", "Bộ dây siết cáp nhựa 2 mét"]
+          }
+        ],
+        tom_tat_cuon_chieu: "Khởi đầu cuộc hành trình sinh tồn mạt thế khốc liệt.",
+        chuong_gan_nhat: [],
+        isCommittingMemory: false,
+      });
+    },
 
     // Quét tìm vật dụng chữ ký trong văn bản sinh ra
     scanSignatureProps: (text) => {
@@ -1279,6 +1364,175 @@ Dưới đây là hồ sơ nhân vật tĩnh đã được bóc tách tự độ
       if (nextIdx >= 0 && nextIdx < danh_muc_chuong.length) {
         selectChapter(nextIdx);
       }
+    },
+
+    commitMemory: async () => {
+      const { 
+        activeChapterIndex, danh_muc_chuong, callGenerateAPI, syncStateJson, useMock,
+        lorebook_the_gioi, bo_nho_nhan_vat, tom_tat_cuon_chieu, chuong_gan_nhat
+      } = get();
+      
+      const ch = danh_muc_chuong[activeChapterIndex];
+      if (!ch || !ch.noi_dung_kich_ban) return;
+
+      set({
+        isCommittingMemory: true,
+        pipelineStep: 5,
+        displayedText: "Đang tiến hành phân tích kịch bản chương vừa viết... Đang nạp RAG bộ nhớ cuốn chiếu... Cập nhật Lorebook & Sổ rách...",
+        isStreaming: true
+      });
+
+      if (useMock) {
+        await get().simulateMockMemoryCommitStream();
+        return;
+      }
+
+      const requestBody = {
+        requestType: "COMMIT_MEMORY",
+        activeChapterIndex: activeChapterIndex,
+        activeChapterText: ch.noi_dung_kich_ban,
+        lorebook_the_gioi,
+        bo_nho_nhan_vat,
+        tom_tat_cuon_chieu,
+        chuong_gan_nhat
+      };
+
+      const res = await callGenerateAPI(
+        requestBody,
+        null,
+        (err) => {
+          alert(`Lỗi ghi sổ & nén ký ức: ${err.message}`);
+          set({
+            isCommittingMemory: false,
+            isStreaming: false
+          });
+        }
+      );
+
+      if (!res) return;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+
+      try {
+        set({ displayedText: "" });
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          accumulatedText += chunk;
+          set({ displayedText: accumulatedText });
+        }
+
+        const cleanedText = get().syncStateJson(accumulatedText);
+
+        set({
+          displayedText: cleanedText,
+          isCommittingMemory: false,
+          isStreaming: false
+        });
+
+      } catch (err) {
+        console.error("Lỗi đọc stream nén ký ức: ", err);
+        set({
+          isCommittingMemory: false,
+          isStreaming: false
+        });
+      }
+    },
+
+    simulateMockMemoryCommitStream: async () => {
+      const { activeChapterIndex, danh_muc_chuong, lorebook_the_gioi, bo_nho_nhan_vat, tom_tat_cuon_chieu, chuong_gan_nhat } = get();
+      const ch = danh_muc_chuong[activeChapterIndex];
+      const chNum = ch?.so_chuong || (activeChapterIndex + 1);
+
+      const updatedLorebook = {
+        quy_tac_sinh_ton: [...(lorebook_the_gioi?.quy_tac_sinh_ton || [])],
+        dia_diem_da_mo_khoa: Array.from(new Set([...(lorebook_the_gioi?.dia_diem_da_mo_khoa || []), `Phế tích Tầng ${Math.min(chNum, 8)}: Vùng hoang dã mới mở khóa ở Chương ${chNum}`]))
+      };
+
+      const updatedNhanVat = (bo_nho_nhan_vat || []).map(nv => {
+        if (nv.ten === "Tiêu Hàn") {
+          return {
+            ...nv,
+            tinh_trang_hien_tai: `Bị trầy xước đùi nhẹ, kiệt sức nhẹ sau khi dùng tay phải bẫy drone ở Chương ${chNum}.`,
+            vat_dung_dang_mang: ["Bật lửa đồng", "Bình nước vỏ sắt móp méo (hết nước)", "Kính một tròng nứt"]
+          };
+        }
+        if (nv.ten === "Thạch Dã") {
+          return {
+            ...nv,
+            tinh_trang_hien_tai: "Chấn thương rách gân gót chân phải rỉ máu nhẹ, được cố định bằng cáp nhựa.",
+            vat_dung_dang_mang: ["La bàn cơ khí", "Bộ dây siết cáp nhựa 2 mét (còn 1.5 mét)"]
+          };
+        }
+        return nv;
+      });
+
+      const nextSummary = `${tom_tat_cuon_chieu || ""} Ở Chương ${chNum}, Tiêu Hàn đã kiên cường sử dụng tay phải phối hợp chiếc bật lửa đồng rỉ sét cùng bình nước sắt móp bẫy Drone cơ khí rà quét tia laser đỏ tự sát va đập tuabin gió, tạm thời giải nguy cho bản thân và đồng đội Thạch Dã bị rách gân gót chân tại ga tàu bỏ hoang.`;
+
+      const newShortTerm = [
+        ...chuong_gan_nhat.filter(c => c.chuong !== chNum),
+        {
+          chuong: chNum,
+          noi_dung_tom_luoc: `Tiêu Hàn bẫy thành công Drone săn mồi cơ khí quét laser đỏ bằng cách ném bình nước sắt tạo tiếng động phản xạ.`
+        }
+      ].slice(-3);
+
+      const mockCommitResponse = `# NHẬT KÝ GHI SỔ & NÉN KÝ ỨC (MOCK MODE ACTIVE)
+- Đang tiến hành phân tích kịch bản Chương ${chNum}... Phát hiện các thực thể sinh tồn: Tiêu Hàn, Thạch Dã.
+- Phát hiện sử dụng vật phẩm chữ ký: Bật lửa đồng rỉ sét, bình nước vỏ sắt móp méo, dây siết cáp nhựa.
+- Phát hiện môi trường: Ga tàu điện bỏ hoang dưới lòng đất, Drone săn mồi quét tia laser đỏ.
+- Tiến hành cập nhật Sổ Rách Cơ Thể: Tiêu Hàn bị kiệt sức nhẹ; Thạch Dã rỉ máu chân.
+- Tiến hành cập nhật Lorebook: Mở khóa vùng hoang dã mới.
+- Tiến hành Rolling Summary: Tóm tắt nén cuốn chiếu toàn bộ ${chNum} chương trước đó.
+
+\`\`\`STATE_JSON
+{
+  "lorebook_the_gioi": ${JSON.stringify(updatedLorebook)},
+  "bo_nho_nhan_vat": ${JSON.stringify(updatedNhanVat)},
+  "tom_tat_cuon_chieu": ${JSON.stringify(nextSummary)},
+  "chuong_gan_nhat": ${JSON.stringify(newShortTerm)}
+}
+\`\`\``;
+
+      const chunks = [];
+      for (let i = 0; i < mockCommitResponse.length; i += 40) {
+        chunks.push(mockCommitResponse.substring(i, i + 40));
+      }
+
+      let idx = 0;
+      set({ displayedText: "" });
+
+      return new Promise((resolve) => {
+        const interval = setInterval(() => {
+          if (idx < chunks.length) {
+            const nextChunk = chunks[idx];
+            const currentText = get().displayedText + nextChunk;
+            set({ displayedText: currentText });
+            idx++;
+          } else {
+            clearInterval(interval);
+            
+            const finalFullText = get().displayedText;
+            const cleanedText = get().syncStateJson(finalFullText);
+            
+            set({
+              displayedText: cleanedText,
+              isCommittingMemory: false,
+              isStreaming: false
+            });
+            resolve(true);
+          }
+        }, 15);
+      });
     }
   };
-});
+},
+{
+  name: 'chuyen_gia_mac_the_store',
+  skipHydration: true
+}
+)
+);
