@@ -413,7 +413,7 @@ export default function Home() {
                     onClick={() => setExpandedSection("props")}
                     className={`py-2 transition-colors ${expandedSection === "props" ? "bg-emerald-950/20 text-emerald-400" : "text-zinc-500 hover:text-zinc-300"}`}
                   >
-                    🎒 PROPS
+                    🎒 CỔNG TỪ
                   </button>
                 </div>
 
@@ -619,6 +619,51 @@ export default function Home() {
                   {/* TAB 4: ĐỆT ẤN KÝ VẬT DỤNG (SIGNATURE PROPS) */}
                   {expandedSection === "props" && (
                     <div className="space-y-4">
+                      {/* Cổng từ Word-Gate */}
+                      <div>
+                        <h4 className="text-xs font-bold text-white uppercase font-heading mb-2 flex justify-between items-center">
+                          <span>Cổng Từ (Word-Gate)</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              store.setMinWordCount(3910);
+                              store.setMaxWordCount(4590);
+                            }}
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white font-mono uppercase transition-colors cursor-pointer"
+                            title="Khôi phục chuẩn vàng mặc định 3.910 - 4.590 từ"
+                          >
+                            Mặc định
+                          </button>
+                        </h4>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] text-zinc-500 font-mono block mb-1">TỪ TỐI THIỂU (MIN)</label>
+                            <input
+                              type="number"
+                              className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 font-mono"
+                              value={store.minWordCount}
+                              onChange={(e) => store.setMinWordCount(parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-zinc-500 font-mono block mb-1">TỪ TỐI ĐA (MAX)</label>
+                            <input
+                              type="number"
+                              className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 font-mono"
+                              value={store.maxWordCount}
+                              onChange={(e) => store.setMaxWordCount(parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-[9px] font-mono text-zinc-650 block mt-1.5">
+                          * Chuẩn vàng mặc định: 3.910 - 4.590 từ.
+                        </span>
+                      </div>
+
+                      <hr className="border-zinc-900/60" />
+
+                      {/* Đột Phá Ấn Ký Chữ Ký */}
                       <div>
                         <h4 className="text-xs font-bold text-white uppercase font-heading mb-2">Đột Phá Ấn Ký Chữ Ký</h4>
                         
@@ -733,7 +778,7 @@ export default function Home() {
                 <div className="text-right">
                   <div className="text-[10px] text-zinc-500 font-mono uppercase">Số từ:</div>
                   <div className="text-xs font-mono font-bold text-white">
-                    {store.wordCount.toLocaleString()} / <span className="text-[10px] text-zinc-500">3.910-4.590</span>
+                    {store.wordCount.toLocaleString()} / <span className="text-[10px] text-zinc-500">{store.minWordCount.toLocaleString('vi-VN')}-{store.maxWordCount.toLocaleString('vi-VN')}</span>
                   </div>
                 </div>
 

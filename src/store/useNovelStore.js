@@ -147,6 +147,8 @@ export const useNovelStore = create((set, get) => {
     wordCount: 0,
     wordGatePassed: false,
     stampWeavingPassed: false,
+    minWordCount: 3910,
+    maxWordCount: 4590,
 
     // Actions
     setTheme: (theme) => set({ theme }),
@@ -170,6 +172,15 @@ export const useNovelStore = create((set, get) => {
     setGeniusOps: (geniusOps) => set({ geniusOps }),
     setGeniusParadox: (geniusParadox) => set({ geniusParadox }),
     setGeniusCost: (geniusCost) => set({ geniusCost }),
+
+    setMinWordCount: (minWordCount) => {
+      set({ minWordCount });
+      get().calculateWordCount(get().displayedText);
+    },
+    setMaxWordCount: (maxWordCount) => {
+      set({ maxWordCount });
+      get().calculateWordCount(get().displayedText);
+    },
 
     setTrophicLevel: (level) => {
       const levelData = TROPHIC_WEB[level];
@@ -243,6 +254,8 @@ export const useNovelStore = create((set, get) => {
       wordCount: 0,
       wordGatePassed: false,
       stampWeavingPassed: false,
+      minWordCount: 3910,
+      maxWordCount: 4590,
     }),
 
     // Quét tìm vật dụng chữ ký trong văn bản sinh ra
@@ -292,7 +305,7 @@ export const useNovelStore = create((set, get) => {
       // dựa trên điều kiện của Prompt. Trong code này, ta sẽ kiểm tra xem số từ thực tế có nằm trong
       // khoảng 3910 - 4590 từ hay không, hoặc nếu người dùng muốn mô phỏng kịch bản chuẩn, chúng ta
       // nhân hệ số hiển thị hoặc tính số từ thực tế. Hãy đếm từ thực tế và kiểm tra!
-      const passed = count >= 3910 && count <= 4590;
+      const passed = count >= get().minWordCount && count <= get().maxWordCount;
 
       set({
         wordCount: count,
@@ -501,7 +514,9 @@ export const useNovelStore = create((set, get) => {
         config: {
           chủ_đề: theme,
           phong_cách: style,
-          số_chương: chapters.length
+          số_chương: chapters.length,
+          minWordCount: get().minWordCount || 3910,
+          maxWordCount: get().maxWordCount || 4590
         },
         stateJSON: {
           fatigue,
