@@ -11,6 +11,7 @@ export default function Home() {
   // Settings & Navigation States
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [keyInputText, setKeyInputText] = useState("");
+  const [promptError, setPromptError] = useState("");
   const [leftTab, setLeftTab] = useState("outline"); // "outline" | "characters" | "scratchpad"
   const [isEditingScript, setIsEditingScript] = useState(false);
   const [scriptEditText, setScriptEditText] = useState("");
@@ -59,9 +60,10 @@ export default function Home() {
   const handleStartOutline = (e) => {
     e.preventDefault();
     if (!store.prompt.trim()) {
-      alert("Vui lòng điền ý tưởng kịch bản gốc hoặc bấm ✨ AI Tự Tạo Ý Tưởng!");
+      setPromptError("Ý tưởng kịch bản gốc không được để trống! Vui lòng tự nhập hoặc bấm ✨ AI Tự Tạo Ý Tưởng để tự động sinh.");
       return;
     }
+    setPromptError("");
     store.generateOutlineBranch(0);
   };
 
@@ -236,6 +238,12 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
+          {store.useMock && (
+            <span className="text-[10px] font-mono font-black text-orange-400 bg-orange-950/40 border border-orange-500/30 px-2.5 py-1 rounded-full animate-pulse shadow shadow-orange-950/50">
+              📶 MOCK MODE ACTIVE
+            </span>
+          )}
+
           {store.rotationMessage && (
             <span className="text-[11px] font-mono text-amber-500 animate-pulse bg-amber-950/20 border border-amber-900/30 px-2 py-0.5 rounded">
               🔄 {store.rotationMessage}
@@ -381,18 +389,31 @@ export default function Home() {
                   <label className="block text-xs font-bold text-white uppercase tracking-wider font-mono">4. Ý TƯỞNG KỊCH BẢN GỐC</label>
                   <button
                     type="button"
-                    onClick={() => store.generateAIPrompt()}
+                    onClick={() => {
+                      store.generateAIPrompt();
+                      setPromptError("");
+                    }}
                     className="px-3 py-1 text-xs rounded-full bg-orange-950/50 hover:bg-orange-900/60 border border-orange-500/20 text-orange-400 font-extrabold flex items-center gap-1.5 transition-all cursor-pointer"
                   >
                     ✨ AI Tự Tạo Ý Tưởng
                   </button>
                 </div>
                 <textarea 
-                  className="w-full h-28 p-3 bg-zinc-950 border border-zinc-900 rounded-lg text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 placeholder-zinc-750 leading-relaxed font-sans" 
+                  className={`w-full h-28 p-3 bg-zinc-950 border rounded-lg text-xs text-zinc-300 focus:outline-none placeholder-zinc-750 leading-relaxed font-sans transition-all ${
+                    promptError ? 'border-red-500/65 focus:border-red-500/80 shadow-inner' : 'border-zinc-900 focus:border-zinc-800'
+                  }`}
                   value={store.prompt}
-                  onChange={(e) => store.setPrompt(e.target.value)}
+                  onChange={(e) => {
+                    store.setPrompt(e.target.value);
+                    if (e.target.value.trim()) setPromptError("");
+                  }}
                   placeholder="Ví dụ: Tiêu Hàn là phàm nhân bị liệt một tay trái, ẩn nấp trong phế tích ga tàu điện cũ ngập nước đen phóng xạ. Anh sở hữu bình nước vỏ sắt cũ móp méo và phải tìm cách thoát khỏi sương phóng xạ ăn mòn cùng bầy quái vật Tầng 2..."
                 />
+                {promptError && (
+                  <p className="text-red-500 text-[11px] font-mono mt-1.5 px-1 flex items-center gap-1 animate-pulse">
+                    ⚠️ {promptError}
+                  </p>
+                )}
               </div>
 
               {/* Số chương */}
@@ -1106,6 +1127,23 @@ export default function Home() {
                   onChange={(e) => setKeyInputText(e.target.value)}
                   placeholder="AIzaSy..."
                 />
+              </div>
+
+              {/* Giả lập Ngoại tuyến Checkbox */}
+              <div className="flex items-center justify-between bg-zinc-950 border border-zinc-900 p-3 rounded-lg">
+                <div className="pr-2">
+                  <span className="text-[11px] font-bold text-white uppercase font-mono block">🔌 Giả lập Ngoại tuyến (Offline Mock)</span>
+                  <span className="text-[10px] text-zinc-550 block font-mono">Bật để test ứng dụng không cần gọi API thật (Gemini)</span>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="mockMode"
+                    checked={store.useMock}
+                    onChange={(e) => store.setUseMock(e.target.checked)}
+                    className="rounded bg-[#181822] border-[#2d2d3d] text-orange-500 focus:ring-0 cursor-pointer w-4 h-4"
+                  />
+                </div>
               </div>
 
               <div className="bg-zinc-950 border border-zinc-900 p-3 rounded space-y-1.5 font-mono text-[10px] text-zinc-450">

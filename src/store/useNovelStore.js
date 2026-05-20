@@ -93,6 +93,17 @@ export const useNovelStore = create((set, get) => {
     return "Bật lửa đồng, Bình nước vỏ sắt, Kính một tròng nứt";
   };
 
+  const getStoredMockMode = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('chuyen_gia_use_mock') === 'true';
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
+  };
+
   return {
     // Phase 1 Setup Config
     theme: "Sinh Tồn",
@@ -107,6 +118,7 @@ export const useNovelStore = create((set, get) => {
     selectedBranchGenerated: [false, false, false],
     isExtractingCharacters: false,
     charactersExtracted: false,
+    useMock: getStoredMockMode(),
     scratchpad: "",
 
     // Phase 2 Workspace Content State
@@ -378,6 +390,345 @@ export const useNovelStore = create((set, get) => {
     setPipelineStep: (step) => set({ pipelineStep: step }),
     setActiveOutlineBranch: (idx) => set({ activeOutlineBranch: idx }),
     setScratchpad: (scratchpad) => set({ scratchpad }),
+    setUseMock: (useMock) => {
+      set({ useMock });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('chuyen_gia_use_mock', useMock ? 'true' : 'false');
+      }
+    },
+
+    simulateMockOutlineStream: async (branchIndex) => {
+      const mockOutlines = [
+        // Nhánh 1
+`# DÀN Ý CHI TIẾT - NHÁNH 1: ĐƯỜNG NGẦM PHÓNG XẠ (GIẢ LẬP)
+
+## 1. Bối cảnh Thế giới
+Thế giới hoang tàn sau thảm họa hạt nhân. Sương phóng xạ vàng bao phủ mặt đất, biến các sinh vật thành thực thể dị biến.
+
+## 2. Cấu trúc 3 hồi
+* **Mở đầu**: Tiêu Hàn, một phàm nhân bị liệt tay trái, đang nấp trong ga tàu điện ngầm bỏ hoang để tránh sương độc và tìm nguồn nước sạch sinh tồn.
+* **Cao trào**: Anh chạm trán với Nhựa Độc Đinh Hương đang rủ xuống từ trần ga tàu. Thể chất suy kiệt và sương độc tràn vào ép anh phải đưa ra các quyết định chiến thuật vật lý bằng tay phải duy nhất.
+* **Kết thúc**: Tiêu Hàn thành công dùng bộ dây siết cáp nhựa và bật lửa đồng rỉ sét kích nổ một turbine máy phát điện cũ, đánh lạc hướng drone săn mồi và chạy thoát ra ngoài.
+
+\`\`\`STATE_JSON
+{
+  "dan_y_tong_the": {
+    "mo_dau": "Tiêu Hàn, phàm nhân liệt tay trái, nấp trong ga tàu điện ngầm hoang phế tránh sương độc và tìm nước.",
+    "cao_trao": "Chạm trán Nhựa Độc Đinh Hương rủ từ trần hầm, dùng bẫy cơ học để lừa gạt quái vật.",
+    "ket_thuc": "Kích nổ turbine cũ bằng bật lửa đồng rỉ sét để tiêu diệt drone săn mồi và thoát ra ngoài."
+  },
+  "danh_muc_chuong": [
+    {
+      "so_chuong": 1,
+      "tieu_de": "Chương 1: Sương Vàng Rỉ Sét",
+      "tom_tat_su_kien": "Tiêu Hàn vượt qua tầm quét của Drone săn mồi để tìm kiếm bình nước sạch trong ga tàu hoang phế.",
+      "noi_dung_kich_ban": "",
+      "da_viet": false
+    },
+    {
+      "so_chuong": 2,
+      "tieu_de": "Chương 2: Nhựa Độc Đinh Hương",
+      "tom_tat_su_kien": "Main đụng độ quái vật rủ xuống từ trần ga tàu và buộc phải di chuyển khập khiễng để đặt bẫy lửa.",
+      "noi_dung_kich_ban": "",
+      "da_viet": false
+    },
+    {
+      "so_chuong": 3,
+      "tieu_de": "Chương 3: Cáp Nhựa Và Lửa Đồng",
+      "tom_tat_su_kien": "Sử dụng dây siết cáp nhựa bẫy chân quái vật và dùng bật lửa đồng rỉ sét để phóng hỏa thiêu rụi xúc tu.",
+      "noi_dung_kich_ban": "",
+      "da_viet": false
+    }
+  ]
+}
+\`\`\``,
+        // Nhánh 2
+`# DÀN Ý CHI TIẾT - NHÁNH 2: NHÀ MÁY BỎ HOANG (GIẢ LẬP)
+
+## 1. Bối cảnh Thế giới
+Nhà máy hóa chất sinh học hoang phế bị dây leo biến dị bao phủ kín kẽ. Sương mù xanh lam độc hại bao trùm các lò phản ứng cũ.
+
+## 2. Cấu Trúc 3 Hồi
+* **Mở đầu**: Tiêu Hàn phát hiện ra một trạm tiếp tế lương thực tự động vẫn còn hoạt động bên trong khu lọc dầu của nhà máy hóa chất bỏ hoang.
+* **Cao trào**: Đàn Sói Xương Xám đột biến bao vây bên ngoài các cửa thoát khí. Anh phải thiết kế một bẫy trọng lực cơ học bằng cách treo các thùng phuy rỉ sét chứa axit.
+* **Kết thúc**: Dùng bật lửa đồng kích hỏa dây dẫn, làm đổ sập thùng phuy axit thiêu cháy đàn sói và thoát ra phế tích rada.
+
+\`\`\`STATE_JSON
+{
+  "dan_y_tong_the": {
+    "mo_dau": "Tiêu Hàn phát hiện trạm tiếp tế tự động hoạt động bên trong khu lọc dầu nhà máy hóa chất bỏ hoang.",
+    "cao_trao": "Đàn Sói Xương Xám bao vây cửa thoát khí, đặt bẫy trọng lực cơ học bằng thùng phuy axit.",
+    "ket_thuc": "Dùng bật lửa đồng kích hỏa đốt dây, sập thùng axit tiêu diệt sói biến dị và rút lui."
+  },
+  "danh_muc_chuong": [
+    {
+      "so_chuong": 1,
+      "tieu_de": "Chương 1: Khu Lọc Dầu Chết Chóc",
+      "tom_tat_su_kien": "Tiêu Hàn lẻn vào trạm tiếp tế và phải ẩn nấp sau các turbine rỉ sét để tránh sói xương xám.",
+      "noi_dung_kich_ban": "",
+      "da_viet": false
+    },
+    {
+      "so_chuong": 2,
+      "tieu_de": "Chương 2: Bẫy Trọng Lực Thùng Axit",
+      "tom_tat_su_kien": "Tiêu Hàn thiết kế hệ thống bẫy ròng rọc cơ học treo thùng phuy axit rách bằng tay phải cực kỳ vất vả.",
+      "noi_dung_kich_ban": "",
+      "da_viet": false
+    },
+    {
+      "so_chuong": 3,
+      "tieu_de": "Chương 3: Tiếng Lửa Trên Dây Dẫn",
+      "tom_tat_su_kien": "Main bật lửa đồng rỉ sét đốt đứt dây treo bẫy axit, dội thẳng vào đàn sói đang vồ đến cửa thoát khí.",
+      "noi_dung_kich_ban": "",
+      "da_viet": false
+    }
+  ]
+}
+\`\`\``,
+        // Nhánh 3
+`# DÀN Ý CHI TIẾT - NHÁNH 3: TRẠM RADA BA VÌ (GIẢ LẬP)
+
+## 1. Bối cảnh Thế giới
+Trạm rada quân sự bỏ hoang trên đỉnh Ba Vì đầy gió rít buốt giá. Drone săn mồi cơ khí độc lập liên tục tuần tiễu xung quanh vách đá.
+
+## 2. Cấu Trúc 3 Hồi
+* **Mở đầu**: Tiêu Hàn bò lên đỉnh vách đá trạm rada để tìm kiếm pin sạc cho bộ đàm khẩn cấp của mình.
+* **Cao trào**: Bão cát phóng xạ ập đến, che khuất tầm nhìn nhưng lại làm tăng độ nhạy quét laser của Drone săn mồi. Anh phải vận dụng Tactical IQ để tính toán nhịp gió lừa drone.
+* **Kết thúc**: Sử dụng bình nước sắt ném đập vào cột ăng-ten sắt rỉ tạo tiếng vang phản xạ, dụ drone lao đầu vào cánh quạt gió bị chém đứt làm đôi.
+
+\`\`\`STATE_JSON
+{
+  "dan_y_tong_the": {
+    "mo_dau": "Tiêu Hàn bò lên trạm rada đỉnh Ba Vì tìm pin sạc bộ đàm trong thời tiết gió rít phóng xạ buốt giá.",
+    "cao_trao": "Bão cát ập đến, drone săn mồi tăng quét laser đỏ, main vận dụng Tactical IQ để tính toán ẩn nấp.",
+    "ket_thuc": "Ném bình nước sắt vào ăng-ten tạo âm vang phản xạ dụ drone va đứt vào tuabin quạt gió."
+  },
+  "danh_muc_chuong": [
+    {
+      "so_chuong": 1,
+      "tieu_de": "Chương 1: Đỉnh Đá Gió Rít",
+      "tom_tat_su_kien": "Tiêu Hàn vượt qua dốc đá trơn trượt bằng một tay bám đá, tay kia giữ chặt bình nước sắt sinh tồn.",
+      "noi_dung_kich_ban": "",
+      "da_viet": false
+    },
+    {
+      "so_chuong": 2,
+      "tieu_de": "Chương 2: Nhịp Quét Tia Laser Đỏ",
+      "tom_tat_su_kien": "Bão cát ập tới, tia laser đỏ của drone săn mồi rà quét sát vạt áo khoác mủn nát của main.",
+      "noi_dung_kich_ban": "",
+      "da_viet": false
+    },
+    {
+      "so_chuong": 3,
+      "tieu_de": "Chương 3: Tiếng Vang Sắt Rỉ",
+      "tom_tat_su_kien": "Búng mạnh bình nước sắt vỏ móp đập vào cột thu lôi tạo tiếng chuông vang dội, bẫy drone tự sát cơ học.",
+      "noi_dung_kich_ban": "",
+      "da_viet": false
+    }
+  ]
+}
+\`\`\``
+      ];
+
+      const fullText = mockOutlines[branchIndex] || mockOutlines[0];
+      const chunks = [];
+      for (let i = 0; i < fullText.length; i += 40) {
+        chunks.push(fullText.substring(i, i + 40));
+      }
+
+      let idx = 0;
+      set({ displayedText: "" });
+
+      return new Promise((resolve) => {
+        const interval = setInterval(() => {
+          if (idx < chunks.length) {
+            const nextChunk = chunks[idx];
+            const currentText = get().displayedText + nextChunk;
+            set({ displayedText: currentText });
+            
+            const branches = [...get().outlineBranches];
+            branches[branchIndex] = currentText;
+            set({ outlineBranches: branches });
+            
+            idx++;
+          } else {
+            clearInterval(interval);
+            
+            const finalFullText = get().displayedText;
+            const cleanedText = get().syncStateJson(finalFullText);
+            
+            const branches = [...get().outlineBranches];
+            branches[branchIndex] = cleanedText;
+            
+            const branchGen = [...get().selectedBranchGenerated];
+            branchGen[branchIndex] = true;
+            
+            set({
+              novelTitle: "NGHỊCH LÝ VONG XUYÊN (GIẢ LẬP)",
+              outlineBranches: branches,
+              selectedBranchGenerated: branchGen,
+              displayedText: cleanedText,
+              isGeneratingOutline: false,
+              isStreaming: false,
+            });
+            resolve(true);
+          }
+        }, 15);
+      });
+    },
+
+    simulateMockCharactersStream: async () => {
+      const fullText = `# HỒ SƠ NHÂN VẬT TRÍCH XUẤT TỪ DÀN Ý (GIẢ LẬP)
+
+Dưới đây là hồ sơ nhân vật tĩnh đã được bóc tách tự động từ Dàn ý chi tiết để khóa cứng tính liên tục cốt truyện:
+
+1. **Tiêu Hàn (Main)**: Phàm nhân sinh tồn kiên cường, bị liệt tay trái, tư duy Tactical IQ cực cao.
+2. **Thạch Dã**: Đồng đội trầm tính, bị chấn thương rách gân gót chân đi khập khiễng, mang theo bộ cáp nhựa sinh tồn.
+
+\`\`\`STATE_JSON
+{
+  "danh_sach_nhan_vat": [
+    {
+      "ten": "Tiêu Hàn",
+      "dac_diem": "Phàm nhân sinh tồn kiên cường, liệt hoàn toàn tay trái do sương vàng ăn mòn, tư duy Tactical IQ cực cao.",
+      "vat_dung_ky_nhan": "Bật lửa đồng rỉ sét, Bình nước vỏ sắt móp méo",
+      "muc_tieu": "Tìm kiếm nước sạch và cứu thoát đồng đội khỏi phế tích ga tàu.",
+      "noi_so": "Drone săn mồi cơ khí quét laser đỏ"
+    },
+    {
+      "ten": "Thạch Dã",
+      "dac_diem": "Đồng hành trầm tính, bị rách gân gót chân phải đi khập khiễng, chịu đau cực giỏi.",
+      "vat_dung_ky_nhan": "La bàn cơ khí cổ, Bộ dây siết cáp nhựa 2 mét",
+      "muc_tieu": "Hỗ trợ Tiêu Hàn sửa chữa turbine phát điện.",
+      "noi_so": "Bào tử Nhựa Độc Đinh Hương ăn mòn da thịt"
+    }
+  ]
+}
+\`\`\``;
+
+      const chunks = [];
+      for (let i = 0; i < fullText.length; i += 40) {
+        chunks.push(fullText.substring(i, i + 40));
+      }
+
+      let idx = 0;
+      set({ displayedText: "" });
+
+      return new Promise((resolve) => {
+        const interval = setInterval(() => {
+          if (idx < chunks.length) {
+            const nextChunk = chunks[idx];
+            const currentText = get().displayedText + nextChunk;
+            set({ displayedText: currentText });
+            idx++;
+          } else {
+            clearInterval(interval);
+            
+            const finalFullText = get().displayedText;
+            const cleanedText = get().syncStateJson(finalFullText);
+            
+            set({
+              isExtractingCharacters: false,
+              charactersExtracted: true,
+              isStreaming: false,
+              displayedText: cleanedText
+            });
+            resolve(true);
+          }
+        }, 15);
+      });
+    },
+
+    simulateMockChapterScriptStream: async () => {
+      const { activeChapterIndex, danh_muc_chuong, scanSignatureProps, calculateWordCount } = get();
+      const ch = danh_muc_chuong[activeChapterIndex];
+      const title = ch?.tieu_de || `Chương ${activeChapterIndex + 1}`;
+
+      const p1 = `Không khí bên trong ga tàu điện ngầm ngập ngụa mùi rỉ sét tanh nồng xen lẫn sương phóng xạ vàng nhạt. Tiêu Hàn ngồi thụp dưới gầm bệ turbine, cánh tay trái liệt hoàn toàn rủ xuống vô lực như một khúc gỗ mục. Anh thở từng hơi nặng nhọc, lồng ngực thắt lại trước sự ăn mòn của không khí độc hại. Trên trần ga, những xúc tu của Nhựa Độc Đinh Hương lay động chập chữa, tiết ra chất dịch nhầy phát ra ánh sáng lam lợ kỳ quái.`;
+      const p2 = `Bên ngoài cửa hầm, tiếng gió rít rú vang lên kèn kẹt. Một tia laser đỏ rực từ mắt cảm biến của Drone Săn Mồi Độc Lập quét ngang qua khe đá rạn nứt, chiếu thẳng vào góc áo khoác mủn nát của Tiêu Hàn. Đầu óc anh vận hành hết công suất. Với Tactical IQ vượt trội, anh nhanh chóng nắm bắt quy luật rà quét năm giây một nhịp của cỗ máy giết người cơ khí kia. Anh không được phép hoảng sợ. Sự may mắn không tồn tại ở thế giới chết chóc này, chỉ có tính toán cơ học lạnh lùng mới giúp phàm nhân sống sót.`;
+      const p3 = `Tiêu Hàn thọc tay phải duy nhất vào túi áo, ngón tay anh chạm vào bề mặt kim loại sần sùi quen thuộc của chiếc bật lửa đồng rỉ sét. Kế bên nó là bình nước vỏ sắt cũ móp méo chứa vài ngụm nước cặn cuối cùng. Anh lấy bình nước ra, khẽ nhấp một ngụm nhỏ để làm dịu đi cái buồng phổi đang rát buốt như bị thiêu đốt. Đồng đội Thạch Dã của anh đang nấp cách đó hai mươi mét, gót chân bị rách gân rướm máu đỏ thẫm khiến anh ta không thể di chuyển bứt tốc quá ba mét mà không ngã quỵ.`;
+      const p4 = `Thạch Dã khẽ giơ bộ dây siết cáp nhựa dài hai mét ra hiệu. Tiêu Hàn gật đầu ra hiệu im lặng. Anh bắt đầu lê tấm thân mỏi mệt bò rạp dưới đất, dùng tay phải kéo lê cơ thể khập khiễng của mình tiến về phía chân bệ đỡ xích cột thu lôi cũ. Nhịp quét laser của drone lại bắt đầu. Ba, hai, một. Ánh sáng đỏ vừa trượt qua, Tiêu Hàn búng mạnh bình nước vỏ sắt móp méo đập vào vỏ thép của cột thu lôi. KENG! Âm vang kim loại đập nhau dội vang dữ dội trong lòng đường ngầm phế tích. Cỗ drone cơ khí lập tức đổi hướng đầu servo, lao vút vào bên trong vách hang đá nơi tiếng động phát ra, đâm thẳng vào tuabin gió đang quay tít kèn kẹt và bị chém đứt vụn sắt vụn văng tung tóe.`;
+      
+      let scriptContent = `## ${title.toUpperCase()} (GIẢ LẬP)\n\n`;
+      scriptContent += `### Diễn biến chi tiết kịch bản văn học:\n\n`;
+      
+      for (let i = 0; i < 8; i++) {
+        scriptContent += `${p1}\n\n${p2}\n\n${p3}\n\n${p4}\n\n`;
+      }
+
+      const fullText = `${scriptContent}
+
+\`\`\`STATE_JSON
+{
+  "con_tro": {
+    "chuong_hien_tai": ${ch.so_chuong},
+    "trang_thai_pipeline": "VIET_KICH_BAN"
+  },
+  "dan_y_tong_the": ${JSON.stringify(get().dan_y_tong_the)},
+  "danh_sach_nhan_vat": ${JSON.stringify(get().danh_sach_nhan_vat)},
+  "danh_muc_chuong": [
+    {
+      "so_chuong": ${ch.so_chuong},
+      "tieu_de": "${ch.tieu_de}",
+      "tom_tat_su_kien": "${ch.tom_tat_su_kien}",
+      "noi_dung_kich_ban": "",
+      "da_viet": true
+    }
+  ]
+}
+\`\`\``;
+
+      const chunks = [];
+      for (let i = 0; i < fullText.length; i += 120) {
+        chunks.push(fullText.substring(i, i + 120));
+      }
+
+      let idx = 0;
+      set({ displayedText: "" });
+
+      return new Promise((resolve) => {
+        const interval = setInterval(() => {
+          if (idx < chunks.length) {
+            const nextChunk = chunks[idx];
+            const currentText = get().displayedText + nextChunk;
+            set({ displayedText: currentText });
+            
+            scanSignatureProps(currentText);
+            calculateWordCount(currentText);
+            idx++;
+          } else {
+            clearInterval(interval);
+            
+            const finalFullText = get().displayedText;
+            const cleanedText = get().syncStateJson(finalFullText);
+            
+            const updatedChapters = [...danh_muc_chuong];
+            updatedChapters[activeChapterIndex] = {
+              ...ch,
+              noi_dung_kich_ban: cleanedText,
+              da_viet: true
+            };
+            
+            set({
+              displayedText: cleanedText,
+              danh_muc_chuong: updatedChapters,
+              chapters: updatedChapters.map(c => ({
+                number: c.so_chuong,
+                title: c.tieu_de,
+                content: c.noi_dung_kich_ban,
+                written: c.da_viet
+              })),
+              isWritingChapter: false,
+              isStreaming: false
+            });
+            
+            scanSignatureProps(cleanedText);
+            calculateWordCount(cleanedText);
+            resolve(true);
+          }
+        }, 10);
+      });
+    },
     
     updateOutlineBranchText: (text) => set((state) => {
       const branches = [...state.outlineBranches];
@@ -568,7 +919,7 @@ export const useNovelStore = create((set, get) => {
 
     // GIAI ĐOẠN 1: SINH DÀN Ý CHO NHÁNH ĐƯỢC CHỌN
     generateOutlineBranch: async (branchIndex) => {
-      const { theme, style, prompt, chaptersCount, callGenerateAPI } = get();
+      const { theme, style, prompt, chaptersCount, callGenerateAPI, useMock } = get();
       
       set({
         isGeneratingOutline: true,
@@ -578,6 +929,11 @@ export const useNovelStore = create((set, get) => {
         displayedText: `Đang lập cấu trúc 3 hồi và lên dàn ý độc lập cho Nhánh ${branchIndex + 1}...`,
         isStreaming: true,
       });
+
+      if (useMock) {
+        await get().simulateMockOutlineStream(branchIndex);
+        return;
+      }
 
       const requestBody = {
         requestType: "GENERATE_OUTLINE",
@@ -683,7 +1039,7 @@ export const useNovelStore = create((set, get) => {
 
     // GIAI ĐOẠN 2: TRÍCH XUẤT NHÂN VẬT TỰ ĐỘNG TỪ DÀN Ý ĐÃ CHỐT
     extractCharacters: async () => {
-      const { outlineBranches, activeOutlineBranch, callGenerateAPI, syncStateJson } = get();
+      const { outlineBranches, activeOutlineBranch, callGenerateAPI, syncStateJson, useMock } = get();
       const approvedOutline = outlineBranches[activeOutlineBranch];
 
       set({
@@ -691,6 +1047,11 @@ export const useNovelStore = create((set, get) => {
         displayedText: "Đang tiến hành trích xuất danh sách nhân vật chi tiết từ Dàn ý đã chốt bằng AI...",
         isStreaming: true,
       });
+
+      if (useMock) {
+        await get().simulateMockCharactersStream();
+        return;
+      }
 
       const requestBody = {
         requestType: "EXTRACT_CHARACTERS",
@@ -786,7 +1147,7 @@ export const useNovelStore = create((set, get) => {
       const { 
         activeChapterIndex, danh_muc_chuong, theme, style,
         dan_y_tong_the, danh_sach_nhan_vat, scratchpad,
-        signatureProps, callGenerateAPI, scanSignatureProps, calculateWordCount
+        signatureProps, callGenerateAPI, scanSignatureProps, calculateWordCount, useMock
       } = get();
 
       const ch = danh_muc_chuong[activeChapterIndex];
@@ -798,6 +1159,11 @@ export const useNovelStore = create((set, get) => {
         displayedText: `Đang lập chỉ mục Static Context... Phân tích cấu trúc 3 hồi... Nạp hồ sơ nhân vật tĩnh của ${danh_sach_nhan_vat.length} nhân vật...`,
         isStreaming: true,
       });
+
+      if (useMock) {
+        await get().simulateMockChapterScriptStream();
+        return;
+      }
 
       const requestBody = {
         requestType: "WRITE_SCRIPT",
