@@ -4,8 +4,9 @@ import { streamText } from 'ai';
 export async function POST(req: Request) {
   try {
     const { 
-      config, stateJSON, requestType, selectedChapter, 
-      geniusBeat, signatureProps, apiKey 
+      config, requestType, selectedChapter, 
+      outlineText, dan_y_tong_the, danh_sach_nhan_vat, 
+      danh_muc_chuong, scratchpad, signatureProps, apiKey 
     } = await req.json();
 
     // Sử dụng API Key tùy biến do client gửi lên hoặc fallback về biến môi trường máy chủ
@@ -25,107 +26,160 @@ export async function POST(req: Request) {
       apiKey: finalApiKey
     });
 
-    let systemPrompt = `Bạn là Trợ lý Biên kịch Mạt Thế tối cao, được trang bị "BỘ LỌC LOGIC CỨNG" (Hard Logic Filter).
-Nhiệm vụ của bạn là viết kịch bản/chương tiểu thuyết mạt thế siêu dài, cực kỳ khắt khe về mặt vật lý, sinh học và quy luật sinh tồn.
+    let systemPrompt = "";
+    let userPrompt = "";
+    let temperature = 0.5;
 
-=== 4 RÀNG BUỘC PHẢM NHÂN KHÓA CỨNG (CRITICAL GUARDRAILS) ===
-1. MAIN LÀ PHÀM NHÂN, THẮNG BẰNG TACTICAL IQ: Nhân vật chính tuyệt đối không có siêu năng lực, phép thuật hay tu tiên buff bẩn. Main là người thường có giới hạn thể chất rõ rệt, phải chiến đấu hoặc thoát hiểm bằng trí tuệ chiến thuật đỉnh cao (Tactical IQ), lập kế hoạch chi tiết, phối hợp dụng cụ thô sơ, bẫy cơ học và lợi dụng địa hình vật lý (lấy dữ liệu từ bảng Genius Beat đã cung cấp làm trọng tâm).
-2. TẤN CÔNG LÀ PHẢI TRẢ GIÁ BẰNG TÀI NGUYÊN: Mọi hành động chiến đấu, trốn chạy dữ dội hay vận động thể xác cật lực bắt buộc phải tiêu hao tài nguyên sinh tồn thực tế (nước, lương thực, đạn dược nếu bắn súng, dây rút nếu trói/bẫy). AI phải mô tả sự suy hao tài nguyên này trong nội dung câu chuyện và trừ trực tiếp trong khối STATE_JSON trả về.
-3. TUYỆT ĐỐI CẤM LẶP LẠI MOTIF/TÊN CŨ: Nghiêm cấm sử dụng các danh từ riêng, tên nhân vật hoặc địa danh cũ như: "Lâm Khuyết", "Quảng Nam", "Đinh Hương". Hãy sáng tạo ra những tên Hán Việt hoàn toàn mới (ví dụ: Tiêu Hàn, Thạch Dã, Dạ Vô Cực...), vết thương thể chất ngẫu nhiên, không gian hoang phế ngẫu nhiên.
-4. BẮT BUỘC IN KHỐI STATE_JSON Ở CUỐI RESPONSE: Ở dòng cuối cùng của mỗi câu trả lời (sau khi đã viết xong toàn bộ nội dung văn bản truyện), bạn bắt buộc phải in ra chính xác một khối json cập nhật trạng thái mới của nhân vật bao quanh bởi thẻ \`\`\`STATE_JSON và \`\`\`.
+    // BỘ PHÂN LOẠI PROMPT CHAINING THEO REQUEST TYPE
+    if (requestType === "GENERATE_OUTLINE") {
+      // 1. API DÀN Ý: Chỉ tập trung vào cấu trúc 3 hồi, phân bổ chương, pacing và plot hooks. Không viết rườm rà.
+      temperature = 0.5;
+      systemPrompt = `Bạn là Trợ lý Biên kịch Mạt Thế tối cao chuyên gia cấu trúc cốt truyện.
+Nhiệm vụ của bạn là lập dàn ý chi tiết (Outline) chia làm 3 hồi rõ ràng và thiết lập các chương cho bộ truyện mạt thế sinh tồn.
 
-Định dạng khối STATE_JSON bắt buộc ở cuối response (Hãy tính toán hao hụt tài nguyên sinh tồn hợp lý từ giá trị cũ do Client gửi sang dựa theo tình tiết chương):
+=== QUY TẮC PHẠT LỖI & RÀNG BUỘC CỨNG (CRITICAL GUARDRAILS) ===
+1. TUYỆT ĐỐI CẤM LẶP LẠI TÊN CŨ: Nghiêm cấm sử dụng các danh từ riêng, tên nhân vật hoặc địa danh cũ như: "Lâm Khuyết", "Quảng Nam", "Đinh Hương". Hãy sáng tạo ra những tên Hán Việt hoàn toàn mới (ví dụ: Tiêu Hàn, Thạch Dã, Dạ Vô Cực, Lục Phong...) và địa điểm đổ nát mới.
+2. KHÔNG HOA MỸ RƯỜM RÀ: Tập trung xây dựng nhịp độ (pacing), nút thắt kịch bản, và cấu trúc logic vững chắc.
+3. BẮT BUỘC IN KHỐI STATE_JSON Ở CUỐI RESPONSE: Bạn bắt buộc phải in ra chính xác một khối JSON cập nhật cấu trúc dàn ý bao quanh bởi thẻ \`\`\`STATE_JSON và \`\`\` ở dòng cuối cùng của câu trả lời.
+
+Định dạng khối STATE_JSON bắt buộc ở dòng cuối cùng:
 \`\`\`STATE_JSON
 {
-  "fatigue": <số nguyên từ 0 đến 100, kiệt sức tăng hoặc giảm dựa trên vận động>,
-  "toxin": <số nguyên từ 0 đến 100, nhiễm độc tăng hoặc giảm dựa trên môi trường quái vật>,
-  "water": <số nguyên từ 0 đến 100, nước giảm tương ứng nếu dùng nước sạch sinh tồn>,
-  "food": <số nguyên từ 0 đến 100, lương thực giảm tương ứng nếu dùng thức ăn>,
-  "ammo": <số nguyên thể hiện số lượng đạn dược còn lại sau khi dùng súng>,
-  "cableTies": <số nguyên thể hiện số lượng dây rút còn lại sau khi dùng bẫy/dây>,
-  "injuries": [
-    { "part": "bộ phận cơ thể bị chấn thương", "pain": <độ đau từ 1 đến 10>, "consequence": "hậu quả vật lý thực tế" }
+  "dan_y_tong_the": {
+    "mo_dau": "Mô tả cụ thể hồi 1: Sự khởi đầu, thế giới hoang phế, hoàn cảnh giới hạn thể chất của main và mục tiêu ban đầu",
+    "cao_trao": "Mô tả cụ thể hồi 2: Các biến cố leo thang, chạm trán các tầng quái vật cao hơn, mâu thuẫn sinh tồn cân não",
+    "ket_thuc": "Mô tả hồi 3: Điểm nút thắt cuối cùng, cuộc chiến giải quyết mâu thuẫn chính hoặc lối thoát sinh tử"
+  },
+  "danh_muc_chuong": [
+    {
+      "so_chuong": 1,
+      "tieu_de": "Chương 1: [Tên chương tiếng Việt hấp dẫn]",
+      "tom_tat_su_kien": "Tóm tắt sự kiện chính của chương này (khoảng 2-3 câu). Main phải đối mặt với khó khăn gì, dùng chiến thuật vật lý/cơ học nào?",
+      "noi_dung_kich_ban": "",
+      "da_viet": false
+    },
+    ... (tiếp tục cho đủ số chương)
   ]
 }
 \`\`\`
 `;
 
-    let userPrompt = "";
+      userPrompt = `Hãy lập dàn ý kịch bản 3 hồi và danh mục chương chi tiết cho tác phẩm mạt thế mới:
+- Chủ đề chính: ${config?.chủ_đề || "Sinh Tồn"}
+- Phong cách viết: ${config?.phong_cách || "Mạt Thế"}
+- Ý tưởng/bối cảnh sơ khởi: ${config?.mô_tả || "Không có ý tưởng đặc biệt"}
+- Quy mô kịch bản: ${config?.số_chương || 10} chương.
 
-    if (requestType === "INITIAL_PACKAGE") {
-      systemPrompt += `\n\n=== QUY TẮC BẮT BUỘC ===
-1. Hãy phân tích đủ hệ sinh thái lưới thức ăn (8 tầng dinh dưỡng).
-2. Xây dựng dàn ý chi tiết từng chương (chương 1 tới chương ${config.số_chương}) rõ ràng.
-3. Xuất kịch bản mở màn EPS_HOOK dài khoảng 350 từ mang đậm mùi vị bụi bặm, chết chóc và ngột ngạt của mạt thế.
-4. Cuối response này, vẫn in kèm một khối STATE_JSON mẫu khởi tạo tài nguyên ban đầu (Fatigue=20, Toxin=10, Water=100, Food=100, Ammo=6, CableTies=10, Injuries=[]).`;
+Hãy trình bày chi tiết Tên tác phẩm, Bối cảnh thế giới và dàn ý 3 hồi rõ ràng. Sau cùng, in ra khối STATE_JSON có chứa "dan_y_tong_the" và mảng "danh_muc_chuong" phân bổ chính xác đúng ${config?.số_chương || 10} chương.`;
 
-      userPrompt = `Khởi tạo Gói Kịch Bản Mạt Thế mới với cấu hình sau:
-- Chủ đề chính: ${config.chủ_đề}
-- Phong cách: ${config.phong_cách}
-- Ý tưởng cốt lõi bổ sung: ${config.mô_tả || "Không có"}
-- Quy mô kịch bản: ${config.số_chương} chương.
+    } else if (requestType === "EXTRACT_CHARACTERS") {
+      // 2. API TRÍCH XUẤT NHÂN VẬT: Đọc dàn ý và trích xuất hồ sơ nhân vật tĩnh
+      temperature = 0.3;
+      systemPrompt = `Bạn là Trợ lý Biên kịch Mạt Thế có đầu óc phân tích nhân vật sắc bén.
+Nhiệm vụ của bạn là đọc Dàn ý cốt truyện và trích xuất ra một danh sách các nhân vật cốt lõi với thông tin sinh tồn tĩnh cực kỳ nhất quán.
 
-Hãy trình bày chi tiết Tên tác phẩm, Bối cảnh thế giới, Hồ sơ nhân vật phàm nhân, danh sách mục lục và tập mở đầu EPS_HOOK. Cuối cùng, in ra khối STATE_JSON khởi tạo.`;
+=== QUY TẮC PHÁC HỌA NHÂN VẬT (CHARACTER DESIGN GUARDRAILS) ===
+1. MAIN LÀ PHÀM NHÂN CÓ GIỚI HẠN THỂ CHẤT: Nhân vật chính tuyệt đối không có phép thuật hay siêu năng lực. Bắt buộc phải có một khuyết tật cơ thể rõ rệt (ví dụ: mù một mắt, liệt một tay, rách gân gót chân khập khiễng, tổn thương phổi phải hít thở khò khè...) để định hình các hành vi bị giới hạn.
+2. VẬT DỤNG KÝ NHÂN ĐẶC TRƯNG: Mỗi nhân vật cốt lõi phải mang theo 1-2 vật dụng đặc trưng, thô sơ nhưng hữu dụng (bật lửa cũ, bình nước sắt móp, dây siết cáp nhựa...).
+3. TUYỆT ĐỐI CẤM TÊN CŨ: Cấm sử dụng các tên 'Lâm Khuyết', 'Quảng Nam', 'Đinh Hương'. Tạo tên Hán Việt hoàn toàn mới (Tiêu Hàn, Thạch Dã, Dạ Vô Cực...).
+4. BẮT BUỘC IN KHỐI STATE_JSON Ở CUỐI RESPONSE: Dòng cuối cùng phải là một khối JSON \`\`\`STATE_JSON ... \`\`\` chứa danh sách nhân vật chốt.
 
-    } else {
-      // Dành cho việc sinh viết chi tiết chương
-      const fatigue = stateJSON?.fatigue || 20;
-      const toxin = stateJSON?.toxin || 10;
-      const water = stateJSON?.water || 100;
-      const food = stateJSON?.food || 100;
-      const ammo = stateJSON?.ammo || 6;
-      const cableTies = stateJSON?.cableTies || 10;
-      const injuries = stateJSON?.injuries || [];
+Định dạng khối STATE_JSON bắt buộc ở cuối response:
+\`\`\`STATE_JSON
+{
+  "danh_sach_nhan_vat": [
+    {
+      "ten": "Tên nhân vật Hán Việt mới",
+      "dac_diem": "Mô tả chi tiết ngoại hình, tính cách, và bắt buộc nêu rõ giới hạn thể chất/khuyết tật cơ thể",
+      "vat_dung_ky_nhan": "Vật dụng đặc trưng mang theo người để sinh tồn",
+      "muc_tieu": "Mục tiêu sinh tồn hoặc động cơ hành động chính trong truyện",
+      "noi_so": "Nỗi sợ lớn nhất của nhân vật này trong thế giới mạt thế (ví dụ: Drone cơ khí, sương vàng phóng xạ...)"
+    }
+  ]
+}
+\`\`\`
+`;
 
-      const injuriesText = injuries.length > 0
-        ? injuries.map((inj: any) => `- Bị thương ở ${inj.part} (Độ đau: ${inj.pain}/10): ${inj.consequence}`).join("\n")
-        : "Không có chấn thương vật lý nào.";
+      userPrompt = `Hãy đọc Dàn ý kịch bản đã chốt dưới đây, trích xuất tất cả các nhân vật xuất hiện hoặc phác họa ra dàn nhân vật chính phụ hoàn hảo dựa trên dàn ý này:
 
-      const forbiddenMoves = stateJSON?.forbiddenMoves || [];
-      const forbiddenText = forbiddenMoves.length > 0 
-        ? forbiddenMoves.map((m: string) => `- BỊ CẤM THỰC HIỆN: ${m}`).join("\n")
-        : "Không có hành vi nào bị cấm ở mức này. Cơ thể phàm nhân vẫn vận động tương đối ổn định.";
+--- DÀN Ý ĐÃ CHỐT ---
+${outlineText}
+---------------------
 
-      const minWordCount = config?.minWordCount || 3910;
-      const maxWordCount = config?.maxWordCount || 4590;
+Hãy trình bày hồ sơ từng nhân vật thật sinh động, sau cùng in ra khối STATE_JSON có mảng "danh_sach_nhan_vat" với đầy đủ 5 trường thuộc tính đã định nghĩa.`;
 
-      systemPrompt += `\n\n=== VÒNG LẶP PHẢN HỒI CƠ THỂ (SOMATIC FEEDBACK) ===
-Chỉ số cơ thể nhân vật chính hiện tại: Fatigue (Kiệt sức) = ${fatigue}%, Toxin (Nhiễm độc) = ${toxin}%.
-Tài nguyên sinh tồn hiện tại: Nước = ${water}%, Lương thực = ${food}%, Đạn dược = ${ammo} viên, Dây rút = ${cableTies} sợi.
-Danh sách chấn thương hiện tại:
-${injuriesText}
+    } else if (requestType === "WRITE_SCRIPT") {
+      // 3. API KỊCH BẢN: Tập trung toàn lực vào viết văn kịch bản chi tiết dựa trên bối cảnh tĩnh (Context) khóa cứng
+      temperature = 0.45;
+      const minWords = config?.minWordCount || 3910;
+      const maxWords = config?.maxWordCount || 4590;
 
-Quy tắc somatic nghiêm ngặt về các giới hạn thể chất phàm nhân (bao gồm chấn thương vật lý):
-${forbiddenText}
-Lưu ý: Nếu nhân vật cố gắng thực hiện hành vi bị cấm ở trên, họ sẽ phải trả giá cực kỳ đắt (ví dụ: ngất xỉu, ói máu, trượt tay bóp cò bắn lệch mục tiêu hoàn toàn). Bạn PHẢI viết rõ sự hao mòn thể chất và hao tốn tài nguyên này trong văn bản.
+      // Nạp danh sách nhân vật chi tiết vào hệ thống
+      const characterContext = Array.isArray(danh_sach_nhan_vat) 
+        ? danh_sach_nhan_vat.map(nv => `- **${nv.ten}**: Đặc điểm/Giới hạn thể chất: ${nv.dac_diem}. Vật dụng đặc trưng: ${nv.vat_dung_ky_nhan}. Mục tiêu: ${nv.muc_tieu}. Nỗi sợ: ${nv.noi_so}`).join("\n")
+        : "Chưa thiết lập hồ sơ nhân vật tĩnh.";
 
-=== BỘ KIẾN TRÚC CHIẾN THUẬT "GENIUS BEAT" ===
-Mọi hành động giải quyết mâu thuẫn hay chiến đấu của Main bắt buộc phải bám sát 6 trường chiến thuật sau:
-- 🎯 MỤC TIÊU: ${geniusBeat?.goal || "Trốn chạy an toàn hoặc thu thập tài nguyên."}
-- 🧱 RÀNG BUỘC VẬT LÝ: ${geniusBeat?.constraints || "Độ cao nguy hiểm, góc khuất tầm nhìn, địa hình trơn trượt."}
-- 🎒 CHUẨN BỊ TRƯỚC: ${geniusBeat?.prep || "Đã kiểm tra kỹ lượng đạn dược, rải cát giảm tiếng bước chân."}
-- ⚙️ THAO TÁC VẬT LÝ: ${geniusBeat?.ops || "Di chuyển sát mép tường, kích nổ bẫy tự chế, nén hơi thở."}
-- 🌀 NGHỊCH LÝ BẪY (TRAP PARADOX): ${geniusBeat?.paradox || "Dụ đối thủ tập trung vào điểm giả, tấn công từ điểm mù cơ học."}
-- ⚖️ CÁI GIÁ PHẢI TRẢ: ${geniusBeat?.cost || "Tổn hao sinh lực, hao phí đạn dược, tăng mệt mỏi."}
+      systemPrompt = `Bạn là Đại Văn Hào Mạt Thế, bậc thầy biên kịch truyện sinh tồn logic cứng.
+Nhiệm vụ của bạn là viết kịch bản chi tiết cho chương được chỉ định, sử dụng hoàn hảo các bối cảnh tĩnh (Static Context) được cung cấp bên dưới làm ranh giới khóa cứng.
 
-Bạn PHẢI miêu tả sinh động từng thao tác cơ học thực tế, loại bỏ hoàn toàn may mắn vô lý hoặc buff bẩn từ không trung!
+=== 5 RÀNG BUỘC BIÊN KỊCH TỐI CAO (CRITICAL WRITING LAWS) ===
+1. KHÓA CỨNG HỒ SƠ NHÂN VẬT TĨNH: Tuyệt đối không tự tiện thêm nhân vật mới ngoài danh sách đã duyệt. Không sửa đổi hay làm biến dạng tính cách, khuyết tật thể chất, hay vật dụng đặc trưng của họ. Nhân vật chính bắt buộc phải giải quyết các khó khăn bằng trí tuệ chiến thuật (Tactical IQ), phản ứng vật lý cơ học, đặt bẫy, lừa gạt quái vật chứ không được buff may mắn vô lý.
+2. DỆT ẤN KÝ VẬT DỤNG (STAMP-WEAVING): Bắt buộc lồng ghép chân thực và tinh tế sự xuất hiện cùng công năng thực tế của các vật dụng chữ ký: "${signatureProps || "bình nước sắt, bật lửa đồng, dây cáp nhựa"}" vào các hành động sinh tồn của nhân vật.
+3. VĂN PHONG GAI GÓC ĐA GIÁ CƠ QUAN: Hành văn gai góc, ngột ngạt, bụi bặm. Miêu tả thế giới chi tiết qua nhiều giác quan (mùi ozone rỉ sét, sương phóng xạ buốt giá xộc vào phế quản, tia laser đỏ của drone rà qua vách đá rêu xanh, tiếng gầm rung chấn lồng ngực).
+4. CỔNG TỪ KHẮT KHE (WORD-GATE): Viết cực kỳ chi tiết, kịch tính từng khung cảnh nhỏ. Bắt buộc bài viết chương này phải đạt độ dài từ ${minWords.toLocaleString('vi-VN')} đến ${maxWords.toLocaleString('vi-VN')} từ tiếng Việt để đảm bảo nội dung cực kỳ sâu và trọn vẹn. Hãy đấm chữ thật kiên cường, miêu tả từng bước di chuyển vật lý của nhân vật.
+5. TUYỆT ĐỐI KHÔNG DÙNG TÊN BỊ CẤM: Cấm sử dụng các từ: "Lâm Khuyết", "Quảng Nam", "Đinh Hương".
 
-=== RADAR TROPHIC WEB 8 TẦNG ===
-Thực thể quái vật đang lẩn trốn tại bối cảnh: ${stateJSON?.selectedMonster || "Thực thể biến dị tự do"} (Tầng sinh thái: Tầng ${stateJSON?.trophicLevel || 1})
-Các tín hiệu sensory nhạy bén truyền lại: ${stateJSON?.monsterCues || "Mùi không khí khô hốc"}
-BẮT BUỘC: Bạn phải tả chi tiết các tín hiệu sensory (mùi, nhiệt độ lạnh buốt, độ rung sắt rỉ, tiếng động tần số cao...) này xuất hiện trong môi trường TRƯỚC KHI nhân vật chạm mặt hay mô tả sự đe dọa của quái vật!
+=== THÔNG TIN BỐI CẢNH TĨNH (STATIC CONTEXT) ===
+* DÀN Ý TỔNG THỂ TÁC PHẨM:
+- Mở đầu: ${dan_y_tong_the?.mo_dau || "Chưa rõ"}
+- Cao trào: ${dan_y_tong_the?.cao_trao || "Chưa rõ"}
+- Kết thúc: ${dan_y_tong_the?.ket_thuc || "Chưa rõ"}
 
-=== DỆT ẤN KÝ VẬT DỤNG (STAMP-WEAVING PROPS) ===
-Bạn phải khéo léo dệt (lồng ghép tự nhiên) sự xuất hiện và công năng thực tế của các vật dụng chữ ký sau của nhân vật vào mạch truyện của chương này:
-👉 Vật dụng chữ ký: "${signatureProps || "Bật lửa đồng, Bình nước vỏ sắt"}"
+* HỒ SƠ NHÂN VẬT ĐÃ DUYỆT:
+${characterContext}
 
-=== CỔNG TỪ ĐẤM CHỮ (WORD-GATE COVENANT) ===
-Hãy viết một chương cực kỳ dài, miêu tả sâu sắc các diễn biến nội tâm, hành động cơ học, bối cảnh ngột ngạt và sự tính toán cân não. Mục tiêu lý tưởng là dài từ ${minWordCount.toLocaleString('vi-VN')} - ${maxWordCount.toLocaleString('vi-VN')} từ. Hãy hành văn thật tỉ mỉ từng chi tiết, làm nổi bật phong cách sinh tồn mạt thế thực tế.
+* GHI CHÚ VIẾT TAY (SCRATCHPAD) DÀNH CHO CHƯƠNG NÀY:
+${scratchpad || "Không có ghi chú đặc biệt từ biên kịch."}
 
-Nhắc lại: Ở dòng cuối cùng của response, bạn bắt buộc phải in ra khối STATE_JSON cập nhật lượng tài nguyên còn lại, fatigue, toxin và chấn thương của nhân vật sau các biến cố của chương này!`;
+=== BẮT BUỘC IN KHỐI STATE_JSON Ở CUỐI RESPONSE ===
+Sau khi đã viết xong toàn bộ nội dung kịch bản văn học của chương, ở dòng cuối cùng, bạn bắt buộc phải in ra khối JSON \`\`\`STATE_JSON và \`\`\` để cập nhật trạng thái câu chuyện. 
 
-      userPrompt = `Hãy viết chi tiết chương kịch bản: CHƯƠNG ${selectedChapter} - PHÂN CẢNH TIẾP THEO.
-Bám sát toàn bộ các chỉ số Somatic, Cues hệ sinh thái của thực thể lân cận, dệt các Props chữ ký và diễn giải chính xác nước đi thiên tài Genius Beat đã định sẵn! Sau khi viết xong chương, in khối STATE_JSON phản ánh sự suy giảm tài nguyên và biến đổi trạng thái ở cuối cùng.`;
+Định dạng khối STATE_JSON bắt buộc ở cuối response:
+\`\`\`STATE_JSON
+{
+  "con_tro": {
+    "chuong_hien_tai": ${selectedChapter},
+    "trang_thai_pipeline": "VIET_KICH_BAN"
+  },
+  "dan_y_tong_the": ${JSON.stringify(dan_y_tong_the || {})},
+  "danh_sach_nhan_vat": ${JSON.stringify(danh_sach_nhan_vat || [])},
+  "danh_muc_chuong": [
+    {
+      "so_chuong": ${selectedChapter},
+      "tieu_de": "Chương ${selectedChapter}",
+      "tom_tat_su_kien": "Tóm tắt sự kiện chương này đã xảy ra",
+      "noi_dung_kich_ban": "",
+      "da_viet": true
+    }
+  ]
+}
+\`\`\`
+Lưu ý: Mảng "danh_muc_chuong" trong khối JSON này chỉ cần trả về tối thiểu phần tử của chương hiện tại đang viết (đã đặt "da_viet": true và "noi_dung_kich_ban" có thể để chuỗi trống vì frontend sẽ tự động gán văn bản chương đã sinh vào).`;
+
+      // Tìm thông tin chương hiện tại
+      const currentChapterData = Array.isArray(danh_muc_chuong) 
+        ? danh_muc_chuong.find(c => c.so_chuong === selectedChapter)
+        : null;
+      const chapterTitle = currentChapterData?.tieu_de || `Chương ${selectedChapter}`;
+      const chapterEvent = currentChapterData?.tom_tat_su_kien || "Sự kiện sinh tồn căng thẳng.";
+
+      userPrompt = `Hãy viết chi tiết chương kịch bản: ${chapterTitle.toUpperCase()} - SỰ KIỆN TẤN CÔNG/THOÁT HIỂM.
+
+Chi tiết sự kiện cần viết:
+- Tóm tắt diễn biến: ${chapterEvent}
+- Ghi chú định hướng (Scratchpad): ${scratchpad || "Không có"}
+
+Hãy viết chương này thật dài, tỉ mỉ từng hành động vật lý của nhân vật chính phàm nhân, áp dụng toàn bộ các chỉ dẫn Static Context và Stamp-Weaving props. Đảm bảo số từ đạt tối thiểu ${minWords} từ!`;
     }
 
     const result = await streamText({
@@ -134,7 +188,7 @@ Bám sát toàn bộ các chỉ số Somatic, Cues hệ sinh thái của thực 
       messages: [
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.45, // Tối ưu hóa tính nhất quán logic cao, chống bay bổng ngẫu nhiên
+      temperature: temperature, // Tối ưu hóa cho từng giai đoạn
     });
 
     return result.toTextStreamResponse();

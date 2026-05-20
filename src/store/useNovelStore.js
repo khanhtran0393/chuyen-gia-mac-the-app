@@ -100,6 +100,15 @@ export const useNovelStore = create((set, get) => {
     prompt: "",
     chaptersCount: 10,
 
+    // Pipeline State
+    pipelineStep: 1, // 1: Ý Tưởng, 2: Dàn Ý, 3: Nhân Vật, 4: Kịch Bản
+    outlineBranches: ["", "", ""],
+    activeOutlineBranch: 0,
+    selectedBranchGenerated: [false, false, false],
+    isExtractingCharacters: false,
+    charactersExtracted: false,
+    scratchpad: "",
+
     // Phase 2 Workspace Content State
     phase: 1, // 1 or 2
     novelTitle: "",
@@ -109,9 +118,14 @@ export const useNovelStore = create((set, get) => {
 
     // Core Data
     worldBackground: "",
-    characters: [],
-    outlineText: "",
-    chapters: [], // Array of { number: 1, title: "", content: "", written: false }
+    characters: [], // Old compatibility array
+    outlineText: "", // Old compatibility text
+    chapters: [], // Old compatibility array
+
+    // Structured Data (Tiếng Việt)
+    dan_y_tong_the: { mo_dau: "", cao_trao: "", ket_thuc: "" },
+    danh_sach_nhan_vat: [],
+    danh_muc_chuong: [],
 
     // Active chapter controls
     activeChapterIndex: 0,
@@ -227,7 +241,7 @@ export const useNovelStore = create((set, get) => {
     syncStateJson: (text) => {
       if (!text) return text;
       
-      const stateJsonMatch = text.match(/```(?:STATE_JSON|json)?\s*({\s*"fatigue"[\s\S]*?})\s*```/i) 
+      const stateJsonMatch = text.match(/```(?:STATE_JSON|json)?\s*({\s*"(?:fatigue|con_tro|dan_y_tong_the|danh_sach_nhan_vat|danh_muc_chuong)"[\s\S]*?})\s*```/i) 
                           || text.match(/```STATE_JSON\s*([\s\S]*?)\s*```/i);
                           
       if (stateJsonMatch && stateJsonMatch[1]) {
@@ -235,6 +249,39 @@ export const useNovelStore = create((set, get) => {
           const data = JSON.parse(stateJsonMatch[1].trim());
           const updates = {};
           
+          // --- HỖ TRỢ ĐỊNH DẠNG TIẾNG VIỆT MỚI (STORY MEMORY) ---
+          if (data.con_tro) {
+            if (typeof data.con_tro.chuong_hien_tai === 'number') {
+              updates.activeChapterIndex = data.con_tro.chuong_hien_tai - 1;
+            }
+          }
+          if (data.dan_y_tong_the) {
+            updates.dan_y_tong_the = data.dan_y_tong_the;
+          }
+          if (Array.isArray(data.danh_sach_nhan_vat)) {
+            updates.danh_sach_nhan_vat = data.danh_sach_nhan_vat;
+          }
+          if (Array.isArray(data.danh_muc_chuong)) {
+            const currentList = get().danh_muc_chuong || [];
+            updates.danh_muc_chuong = data.danh_muc_chuong.map((ch, idx) => {
+              const existing = currentList.find(c => c.so_chuong === ch.so_chuong) || currentList[idx] || {};
+              return {
+                ...existing,
+                ...ch,
+                noi_dung_kich_ban: ch.noi_dung_kich_ban || existing.noi_dung_kich_ban || "",
+                da_viet: ch.da_viet !== undefined ? ch.da_viet : (existing.da_viet || false)
+              };
+            });
+            // Đồng bộ ngược sang chapters compatibility array
+            updates.chapters = updates.danh_muc_chuong.map(ch => ({
+              number: ch.so_chuong,
+              title: ch.tieu_de,
+              content: ch.noi_dung_kich_ban || "",
+              written: ch.da_viet || false
+            }));
+          }
+
+          // --- HỖ TRỢ ĐỊNH DẠNG TIẾNG ANH CŨ (SOMATIC COMPATIBILITY) ---
           if (typeof data.fatigue === 'number') updates.fatigue = data.fatigue;
           if (typeof data.toxin === 'number') updates.toxin = data.toxin;
           if (typeof data.water === 'number') updates.water = data.water;
@@ -315,7 +362,6 @@ export const useNovelStore = create((set, get) => {
       if (typeof window !== 'undefined') {
         localStorage.setItem('chuyen_gia_props', propsStr);
       }
-      // Re-scan current content immediately if it exists
       get().scanSignatureProps(get().displayedText);
     },
 
@@ -328,7 +374,48 @@ export const useNovelStore = create((set, get) => {
       return { chaptersCount: next };
     }),
 
+    // Pipeline Navigation Actions
+    setPipelineStep: (step) => set({ pipelineStep: step }),
+    setActiveOutlineBranch: (idx) => set({ activeOutlineBranch: idx }),
+    setScratchpad: (scratchpad) => set({ scratchpad }),
+    
+    updateOutlineBranchText: (text) => set((state) => {
+      const branches = [...state.outlineBranches];
+      branches[state.activeOutlineBranch] = text;
+      return { outlineBranches: branches };
+    }),
+
+    setDanhSachNhanVat: (danh_sach_nhan_vat) => set({ danh_sach_nhan_vat }),
+    
+    addNhanVat: (nv) => set((state) => ({
+      danh_sach_nhan_vat: [...state.danh_sach_nhan_vat, nv]
+    })),
+    
+    updateNhanVat: (idx, updatedNv) => set((state) => {
+      const list = [...state.danh_sach_nhan_vat];
+      if (list[idx]) {
+        list[idx] = { ...list[idx], ...updatedNv };
+      }
+      return { danh_sach_nhan_vat: list };
+    }),
+
+    removeNhanVat: (ten) => set((state) => ({
+      danh_sach_nhan_vat: state.danh_sach_nhan_vat.filter(nv => nv.ten !== ten)
+    })),
+
     reset: () => set({
+      pipelineStep: 1,
+      outlineBranches: ["", "", ""],
+      activeOutlineBranch: 0,
+      selectedBranchGenerated: [false, false, false],
+      isExtractingCharacters: false,
+      charactersExtracted: false,
+      scratchpad: "",
+      
+      dan_y_tong_the: { mo_dau: "", cao_trao: "", ket_thuc: "" },
+      danh_sach_nhan_vat: [],
+      danh_muc_chuong: [],
+
       phase: 1,
       novelTitle: "",
       isGeneratingOutline: false,
@@ -383,7 +470,6 @@ export const useNovelStore = create((set, get) => {
       const detected = [];
       
       props.forEach(p => {
-        // Tạo regex không phân biệt hoa thường để tìm prop
         const escaped = p.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         const regex = new RegExp(escaped, 'i');
         if (regex.test(text)) {
@@ -403,17 +489,9 @@ export const useNovelStore = create((set, get) => {
         set({ wordCount: 0, wordGatePassed: false });
         return 0;
       }
-      // Đếm số khoảng trắng để ước lượng từ tiếng Việt
       const cleanText = text.trim().replace(/\s+/g, ' ');
       const words = cleanText ? cleanText.split(' ') : [];
       const count = words.length;
-
-      // Cổng từ cứng: 3910 - 4590 từ
-      // Để trải nghiệm người dùng thực tế không phải chờ quá lâu cho 4000 từ thật (mất 5 phút streaming),
-      // chúng ta sẽ đếm thực tế nhưng hiển thị hệ số tỷ lệ đếm từ kịch bản hoặc cho phép đạt chuẩn
-      // dựa trên điều kiện của Prompt. Trong code này, ta sẽ kiểm tra xem số từ thực tế có nằm trong
-      // khoảng 3910 - 4590 từ hay không, hoặc nếu người dùng muốn mô phỏng kịch bản chuẩn, chúng ta
-      // nhân hệ số hiển thị hoặc tính số từ thực tế. Hãy đếm từ thực tế và kiểm tra!
       const passed = count >= get().minWordCount && count <= get().maxWordCount;
 
       set({
@@ -429,8 +507,6 @@ export const useNovelStore = create((set, get) => {
       let startIndex = get().activeApiKeyIndex;
       let attempts = 0;
       const totalKeys = keys.length;
-
-      // Số lượt thử tối đa: bằng số lượng keys hoặc 1 nếu không có keys (sử dụng server key mặc định)
       const maxAttempts = totalKeys > 0 ? totalKeys : 1;
 
       while (attempts < maxAttempts) {
@@ -462,7 +538,6 @@ export const useNovelStore = create((set, get) => {
             const errData = await res.json().catch(() => ({}));
             const errMsg = errData.error || `HTTP error ${res.status}`;
             
-            // Nếu lỗi quota (429) hoặc lỗi xác thực và chúng ta còn key dự phòng, hãy xoay key!
             if ((res.status === 429 || res.status === 400 || res.status === 500) && totalKeys > 1 && attempts < totalKeys - 1) {
               console.warn(`API Key #${currentIdx + 1} lỗi: ${errMsg}. Đang xoay sang key kế tiếp...`);
               attempts++;
@@ -471,9 +546,8 @@ export const useNovelStore = create((set, get) => {
             throw new Error(errMsg);
           }
 
-          // Fetch thành công, xử lý stream trả về
           set({ rotationMessage: "" });
-          return res; // Trả về response để đọc stream
+          return res;
 
         } catch (error) {
           if (totalKeys > 1 && attempts < totalKeys - 1) {
@@ -481,7 +555,6 @@ export const useNovelStore = create((set, get) => {
             attempts++;
             continue;
           }
-          // Hết key dự phòng hoặc lỗi không thể tự xoay
           set({ rotationMessage: "" });
           onError(error);
           return null;
@@ -493,21 +566,22 @@ export const useNovelStore = create((set, get) => {
       return null;
     },
 
-    // Khởi tạo kịch bản / Sinh dàn ý chính thức qua AI
-    startOutlineGeneration: async () => {
-      const { theme, style, prompt, chaptersCount, callGenerateAPI, scanSignatureProps, calculateWordCount } = get();
+    // GIAI ĐOẠN 1: SINH DÀN Ý CHO NHÁNH ĐƯỢC CHỌN
+    generateOutlineBranch: async (branchIndex) => {
+      const { theme, style, prompt, chaptersCount, callGenerateAPI } = get();
       
       set({
-        phase: 2,
         isGeneratingOutline: true,
-        outlineGenerated: false,
-        activeTab: "outline",
-        displayedText: "Đang phân tích hệ sinh thái và khởi tạo dàn ý kịch bản mạt thế...",
+        phase: 2,
+        pipelineStep: 2,
+        activeOutlineBranch: branchIndex,
+        displayedText: `Đang lập cấu trúc 3 hồi và lên dàn ý độc lập cho Nhánh ${branchIndex + 1}...`,
         isStreaming: true,
       });
 
       const requestBody = {
-        requestType: "INITIAL_PACKAGE",
+        requestType: "GENERATE_OUTLINE",
+        branchIndex: branchIndex,
         config: {
           chủ_đề: theme,
           phong_cách: style,
@@ -520,11 +594,117 @@ export const useNovelStore = create((set, get) => {
         requestBody,
         null,
         (err) => {
-          alert(`Lỗi sinh dàn ý kịch bản: ${err.message}`);
+          alert(`Lỗi sinh dàn ý Nhánh ${branchIndex + 1}: ${err.message}`);
           set({
             isGeneratingOutline: false,
             isStreaming: false,
-            phase: 1
+          });
+        }
+      );
+
+      if (!res) return;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+      
+      try {
+        set({ displayedText: "" });
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          accumulatedText += chunk;
+          
+          set({ displayedText: accumulatedText });
+          
+          // Cập nhật tạm thời cho nhánh này
+          const branches = [...get().outlineBranches];
+          branches[branchIndex] = accumulatedText;
+          set({ outlineBranches: branches });
+        }
+
+        // Parse STATE_JSON ở cuối stream
+        const cleanedText = get().syncStateJson(accumulatedText);
+        
+        const branches = [...get().outlineBranches];
+        branches[branchIndex] = cleanedText;
+        
+        const branchGen = [...get().selectedBranchGenerated];
+        branchGen[branchIndex] = true;
+
+        // Trích xuất Tên truyện
+        let novelName = get().novelTitle || "NGHỊCH LÝ VONG XUYÊN";
+        const titleMatch = cleanedText.match(/(?:TÊN TRUYỆN|TÊN KỊCH BẢN|Tên tác phẩm):\s*\*\*?([^\*\n]+)\*\*?/i);
+        if (titleMatch && titleMatch[1]) {
+          novelName = titleMatch[1].trim();
+        }
+
+        set({
+          novelTitle: novelName,
+          outlineBranches: branches,
+          selectedBranchGenerated: branchGen,
+          displayedText: cleanedText,
+          isGeneratingOutline: false,
+          isStreaming: false,
+        });
+
+      } catch (err) {
+        console.error("Lỗi đọc stream dàn ý: ", err);
+        set({
+          isGeneratingOutline: false,
+          isStreaming: false
+        });
+      }
+    },
+
+    // XÁC NHẬN CHỐT DÀN Ý & SANG BƯỚC 3
+    confirmOutline: async () => {
+      const { outlineBranches, activeOutlineBranch, syncStateJson, extractCharacters } = get();
+      const approvedText = outlineBranches[activeOutlineBranch];
+      
+      if (!approvedText || !approvedText.trim()) {
+        alert("Dàn ý nhánh này chưa được tạo hoặc trống rỗng!");
+        return;
+      }
+
+      // Sync lại JSON để đảm bảo cấu trúc lưu trong store
+      syncStateJson(approvedText);
+
+      set({
+        pipelineStep: 3,
+        outlineGenerated: true,
+        outlineText: approvedText // Old compatibility
+      });
+
+      // Tự động gọi trích xuất nhân vật
+      await extractCharacters();
+    },
+
+    // GIAI ĐOẠN 2: TRÍCH XUẤT NHÂN VẬT TỰ ĐỘNG TỪ DÀN Ý ĐÃ CHỐT
+    extractCharacters: async () => {
+      const { outlineBranches, activeOutlineBranch, callGenerateAPI, syncStateJson } = get();
+      const approvedOutline = outlineBranches[activeOutlineBranch];
+
+      set({
+        isExtractingCharacters: true,
+        displayedText: "Đang tiến hành trích xuất danh sách nhân vật chi tiết từ Dàn ý đã chốt bằng AI...",
+        isStreaming: true,
+      });
+
+      const requestBody = {
+        requestType: "EXTRACT_CHARACTERS",
+        outlineText: approvedOutline
+      };
+
+      const res = await callGenerateAPI(
+        requestBody,
+        null,
+        (err) => {
+          alert(`Lỗi trích xuất hồ sơ nhân vật: ${err.message}`);
+          set({
+            isExtractingCharacters: false,
+            isStreaming: false,
           });
         }
       );
@@ -545,118 +725,94 @@ export const useNovelStore = create((set, get) => {
           set({ displayedText: accumulatedText });
         }
 
-        // Đồng bộ và bóc tách khối STATE_JSON nếu có
-        const cleanedText = get().syncStateJson(accumulatedText);
-
-        // Tự động phân tích các thông số từ Dàn Ý được sinh ra để cập nhật Title và nhân vật
-        let novelName = "NGHỊCH LÝ VONG XUYÊN";
-        const titleMatch = cleanedText.match(/(?:TÊN TRUYỆN|TÊN KỊCH BẢN|Tên tác phẩm):\s*\*\*?([^\*\n]+)\*\*?/i);
-        if (titleMatch && titleMatch[1]) {
-          novelName = titleMatch[1].trim();
-        }
-
-        // Tạo sẵn các chương trống dựa trên chaptersCount để viết chi tiết
-        const chapters = [];
-        for (let i = 1; i <= chaptersCount; i++) {
-          chapters.push({
-            number: i,
-            title: `Chương ${i}: Kịch Bản Phân Phối Chi Tiết #${i}`,
-            content: "",
-            written: false
-          });
-        }
+        // Bóc tách JSON danh sách nhân vật và đồng bộ
+        const cleanedText = syncStateJson(accumulatedText);
 
         set({
-          novelTitle: novelName,
-          worldBackground: `Hệ sinh thái bối cảnh mạt thế ${theme} kết hợp phong cách ${style}.`,
-          characters: [
-            { name: "Phàm Nhân (Main)", desc: "Nhân vật chính sinh tồn bằng logic sắt đá, thể chất suy kiệt." },
-            { name: "Đồng Hành Chí Cốt", desc: "Hỗ trợ tác chiến vật lý và cung cấp vật tư hậu cần." },
-            { name: "Thực Thể Săn Mồi", desc: "Quái vật thuộc tầng sinh thái đang ẩn nấp trong khu vực." }
-          ],
-          outlineText: cleanedText,
-          displayedText: cleanedText,
-          chapters,
-          isGeneratingOutline: false,
-          outlineGenerated: true,
-          isStreaming: false
+          isExtractingCharacters: false,
+          charactersExtracted: true,
+          isStreaming: false,
+          displayedText: cleanedText
         });
 
       } catch (err) {
-        console.error("Lỗi đọc stream dàn ý: ", err);
+        console.error("Lỗi đọc stream trích xuất nhân vật: ", err);
         set({
-          isGeneratingOutline: false,
+          isExtractingCharacters: false,
           isStreaming: false
         });
       }
     },
 
-    // Viết chi tiết chương truyện bám sát Hard Logic Filter
+    // XÁC NHẬN CHỐT NHÂN VẬT & SANG BƯỚC 4
+    confirmCharacters: () => {
+      const { danh_muc_chuong } = get();
+      if (!danh_muc_chuong || danh_muc_chuong.length === 0) {
+        // Dự phòng tạo chương nếu không được AI khởi tạo thành công
+        const size = get().chaptersCount || 10;
+        const fallbackChapters = [];
+        for (let i = 1; i <= size; i++) {
+          fallbackChapters.push({
+            so_chuong: i,
+            tieu_de: `Chương ${i}: Kịch Bản Phân Phối Chi Tiết #${i}`,
+            tom_tat_su_kien: "Chưa rõ chi tiết sự kiện.",
+            noi_dung_kich_ban: "",
+            da_viet: false
+          });
+        }
+        set({ 
+          danh_muc_chuong: fallbackChapters,
+          chapters: fallbackChapters.map(ch => ({
+            number: ch.so_chuong,
+            title: ch.tieu_de,
+            content: "",
+            written: false
+          }))
+        });
+      }
+      
+      set({
+        pipelineStep: 4,
+        activeTab: "chapters",
+        displayedText: ""
+      });
+      
+      // Select chương đầu tiên để hiển thị
+      get().selectChapter(0);
+    },
+
+    // GIAI ĐOẠN 3: VIẾT KỊCH BẢN TẬP TRUNG (STATIC REFERENCE CONTEXT)
     writeActiveChapter: async () => {
       const { 
-        activeChapterIndex, chapters, theme, style,
-        fatigue, toxin, water, food, ammo, cableTies, injuries,
-        geniusGoal, geniusConstraints, geniusPrep, geniusOps, geniusParadox, geniusCost,
-        trophicLevel, selectedMonster, monsterCues,
-        signatureProps,
-        callGenerateAPI,
-        scanSignatureProps,
-        calculateWordCount
+        activeChapterIndex, danh_muc_chuong, theme, style,
+        dan_y_tong_the, danh_sach_nhan_vat, scratchpad,
+        signatureProps, callGenerateAPI, scanSignatureProps, calculateWordCount
       } = get();
 
-      const ch = chapters[activeChapterIndex];
+      const ch = danh_muc_chuong[activeChapterIndex];
       if (!ch) return;
 
       set({
         isWritingChapter: true,
         activeTab: "chapters",
-        displayedText: `Đang lập chỉ mục logic... Thiết lập bộ lọc somatic (${fatigue}% fatigue, ${toxin}% toxin)... Đang nhắm mục tiêu quái vật tầng ${trophicLevel}...`,
+        displayedText: `Đang lập chỉ mục Static Context... Phân tích cấu trúc 3 hồi... Nạp hồ sơ nhân vật tĩnh của ${danh_sach_nhan_vat.length} nhân vật...`,
         isStreaming: true,
       });
 
-      // Lọc danh sách hành vi bị cấm dựa trên chỉ số hiện tại (>60%)
-      const forbidden = FORBIDDEN_MOVES.filter(m => {
-        if (m.minFatigue && fatigue >= m.minFatigue) return true;
-        if (m.minToxin && toxin >= m.minToxin) return true;
-        return false;
-      }).map(m => m.move);
-
-      // Thêm chấn thương vật lý từ Injury Tracker vào Forbidden Moves
-      injuries.forEach(inj => {
-        forbidden.push(`Bị thương ở ${inj.part} (Độ đau ${inj.pain}/10): ${inj.consequence}`);
-      });
-
       const requestBody = {
-        requestType: "WRITE_CHAPTER",
-        selectedChapter: ch.number,
+        requestType: "WRITE_SCRIPT",
+        selectedChapter: ch.so_chuong,
         config: {
           chủ_đề: theme,
           phong_cách: style,
-          số_chương: chapters.length,
+          số_chương: danh_muc_chuong.length,
           minWordCount: get().minWordCount || 3910,
           maxWordCount: get().maxWordCount || 4590
         },
-        stateJSON: {
-          fatigue,
-          toxin,
-          forbiddenMoves: forbidden,
-          trophicLevel,
-          selectedMonster,
-          monsterCues,
-          water,
-          food,
-          ammo,
-          cableTies,
-          injuries: injuries.map(inj => ({ part: inj.part, pain: inj.pain, consequence: inj.consequence }))
-        },
-        geniusBeat: {
-          goal: geniusGoal,
-          constraints: geniusConstraints,
-          prep: geniusPrep,
-          ops: geniusOps,
-          paradox: geniusParadox,
-          cost: geniusCost
-        },
+        dan_y_tong_the: dan_y_tong_the,
+        danh_sach_nhan_vat: danh_sach_nhan_vat,
+        danh_muc_chuong: danh_muc_chuong,
+        scratchpad: scratchpad,
         signatureProps: signatureProps
       };
 
@@ -664,7 +820,7 @@ export const useNovelStore = create((set, get) => {
         requestBody,
         null,
         (err) => {
-          alert(`Lỗi sinh nội dung chương: ${err.message}`);
+          alert(`Lỗi sinh kịch bản chi tiết chương: ${err.message}`);
           set({
             isWritingChapter: false,
             isStreaming: false
@@ -688,34 +844,39 @@ export const useNovelStore = create((set, get) => {
           
           set({ displayedText: accumulatedText });
           
-          // Quét và cập nhật số từ/props thời gian thực khi đang stream
           scanSignatureProps(accumulatedText);
           calculateWordCount(accumulatedText);
         }
 
-        // Cập nhật trạng thái chương đã viết xong sau khi bóc tách STATE_JSON
+        // Bóc tách STATE_JSON và đồng bộ
         const cleanedText = get().syncStateJson(accumulatedText);
 
-        const updatedChapters = [...chapters];
+        const updatedChapters = [...danh_muc_chuong];
         updatedChapters[activeChapterIndex] = {
           ...ch,
-          content: cleanedText,
-          written: true
+          noi_dung_kich_ban: cleanedText,
+          da_viet: true
         };
 
         set({
           displayedText: cleanedText,
-          chapters: updatedChapters,
+          danh_muc_chuong: updatedChapters,
+          // Đồng bộ với old compatibility array chapters
+          chapters: updatedChapters.map(c => ({
+            number: c.so_chuong,
+            title: c.tieu_de,
+            content: c.noi_dung_kich_ban,
+            written: c.da_viet
+          })),
           isWritingChapter: false,
           isStreaming: false
         });
 
-        // Cập nhật số lượng từ và props dựa trên văn bản đã làm sạch
         scanSignatureProps(cleanedText);
         calculateWordCount(cleanedText);
 
       } catch (err) {
-        console.error("Lỗi đọc stream chương truyện: ", err);
+        console.error("Lỗi đọc stream viết chương kịch bản: ", err);
         set({
           isWritingChapter: false,
           isStreaming: false
@@ -732,25 +893,24 @@ export const useNovelStore = create((set, get) => {
     },
 
     selectChapter: (index) => {
-      const { isGeneratingOutline, isWritingChapter, chapters } = get();
+      const { isGeneratingOutline, isWritingChapter, danh_muc_chuong } = get();
       if (isGeneratingOutline || isWritingChapter) return;
 
-      const ch = chapters[index];
-      const content = ch && ch.written ? ch.content : "";
+      const ch = danh_muc_chuong[index];
+      const content = ch && ch.da_viet ? ch.noi_dung_kich_ban : "";
       set({
         activeChapterIndex: index,
         activeTab: "chapters",
         displayedText: content
       });
-      // Quét ngay props và số từ của chương được chọn
       get().scanSignatureProps(content);
       get().calculateWordCount(content);
     },
 
     navigateChapter: (direction) => {
-      const { activeChapterIndex, chapters, selectChapter } = get();
+      const { activeChapterIndex, danh_muc_chuong, selectChapter } = get();
       const nextIdx = activeChapterIndex + direction;
-      if (nextIdx >= 0 && nextIdx < chapters.length) {
+      if (nextIdx >= 0 && nextIdx < danh_muc_chuong.length) {
         selectChapter(nextIdx);
       }
     }

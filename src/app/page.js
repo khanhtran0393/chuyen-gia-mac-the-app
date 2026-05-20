@@ -1,79 +1,129 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useNovelStore, TROPHIC_WEB, FORBIDDEN_MOVES } from '@/store/useNovelStore';
+import { useNovelStore, TROPHIC_WEB } from '@/store/useNovelStore';
 import MarkdownBody from '@/components/MarkdownBody';
 
 export default function Home() {
   const store = useNovelStore();
   const renderedTextRef = useRef(null);
+  
+  // Settings & Navigation States
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [keyInputText, setKeyInputText] = useState("");
-  const [expandedSection, setExpandedSection] = useState("somatic"); // "somatic" | "genius" | "trophic" | "props"
+  const [leftTab, setLeftTab] = useState("outline"); // "outline" | "characters" | "scratchpad"
+  const [isEditingScript, setIsEditingScript] = useState(false);
+  const [scriptEditText, setScriptEditText] = useState("");
 
-  // Injury Tracker Form State
-  const [newInjuryPart, setNewInjuryPart] = useState("");
-  const [newInjuryPain, setNewInjuryPain] = useState(5);
-  const [newInjuryConsequence, setNewInjuryConsequence] = useState("");
+  // New character form state
+  const [newCharName, setNewCharName] = useState("");
+  const [newCharTraits, setNewCharTraits] = useState("");
+  const [newCharItem, setNewCharItem] = useState("");
+  const [newCharGoal, setNewCharGoal] = useState("");
+  const [newCharFear, setNewCharFear] = useState("");
 
-  const handleAddInjurySubmit = (e) => {
-    e.preventDefault();
-    if (!newInjuryPart.trim() || !newInjuryConsequence.trim()) return;
-    store.addInjury({
-      part: newInjuryPart.trim(),
-      pain: newInjuryPain,
-      consequence: newInjuryConsequence.trim()
-    });
-    setNewInjuryPart("");
-    setNewInjuryPain(5);
-    setNewInjuryConsequence("");
-  };
+  // Setup Word Gate Default targets when component mounts
+  useEffect(() => {
+    if (store.minWordCount === 0 || store.maxWordCount === 0) {
+      store.setMinWordCount(3910);
+      store.setMaxWordCount(4590);
+    }
+  }, []);
 
-  // Load API keys into local state when opening settings
+  // Load API keys into settings field
   useEffect(() => {
     if (store.apiKeys && store.apiKeys.length > 0) {
       setKeyInputText(store.apiKeys.join("\n"));
     }
   }, [store.apiKeys]);
 
-  // Auto-scroll when streaming text updates
+  // Scroll to bottom when streaming script content
   useEffect(() => {
-    if (renderedTextRef.current) {
+    if (renderedTextRef.current && store.isStreaming) {
       renderedTextRef.current.scrollTop = renderedTextRef.current.scrollHeight;
     }
-  }, [store.displayedText]);
+  }, [store.displayedText, store.isStreaming]);
 
-  // Phase 1 -> Phase 2 Outline Streaming Trigger
+  // Sync edit box when active chapter changes or written script updates
+  const activeChapter = store.danh_muc_chuong[store.activeChapterIndex];
+  useEffect(() => {
+    if (activeChapter && activeChapter.da_viet) {
+      setScriptEditText(activeChapter.noi_dung_kich_ban || "");
+    } else {
+      setScriptEditText("");
+    }
+    setIsEditingScript(false);
+  }, [store.activeChapterIndex, activeChapter?.noi_dung_kich_ban, activeChapter?.da_viet]);
+
+  // Setup Trigger (Step 1 -> Step 2)
   const handleStartOutline = (e) => {
     e.preventDefault();
-    store.startOutlineGeneration();
+    if (!store.prompt.trim()) {
+      alert("Vui lòng điền ý tưởng kịch bản gốc hoặc bấm ✨ AI Tự Tạo Ý Tưởng!");
+      return;
+    }
+    store.generateOutlineBranch(0);
   };
 
-  // Chapter Writing Streaming Trigger
+  // Chapter Generation Trigger
   const handleWriteChapter = () => {
     if (store.isGeneratingOutline || store.isWritingChapter) return;
     store.writeActiveChapter();
   };
 
-  // Switch Tab Handler
-  const handleSwitchTab = (tab) => {
+  // Export Entire Novel script as a text file
+  const handleExportFullNovel = () => {
     if (store.isGeneratingOutline || store.isWritingChapter) return;
-    store.switchTab(tab);
+    const title = store.novelTitle || "Trợ-Lý-Biên-Kịch-Sản-Xuất";
+    
+    let text = `==================================================\n`;
+    text += `TÁC PHẨM TRỢ LÝ BIÊN KỊCH SẢN XUẤT - LOGIC CỨNG\n`;
+    text += `TÊN KỊCH BẢN: ${title.toUpperCase()}\n`;
+    text += `==================================================\n\n`;
+    
+    text += `=== DÀN Ý TỔNG THỂ TÁC PHẨM ===\n`;
+    text += `Mở đầu: ${store.dan_y_tong_the.mo_dau || "Chưa rõ"}\n`;
+    text += `Cao trào: ${store.dan_y_tong_the.cao_trao || "Chưa rõ"}\n`;
+    text += `Kết thúc: ${store.dan_y_tong_the.ket_thuc || "Chưa rõ"}\n\n`;
+    
+    text += `=== HỒ SƠ NHÂN VẬT ĐÃ CHỐT ===\n`;
+    store.danh_sach_nhan_vat.forEach((nv, idx) => {
+      text += `${idx + 1}. ${nv.ten}\n`;
+      text += `   - Đặc điểm & Khuyết tật: ${nv.dac_diem}\n`;
+      text += `   - Vật dụng đặc trưng: ${nv.vat_dung_ky_nhan}\n`;
+      text += `   - Mục tiêu: ${nv.muc_tieu}\n`;
+      text += `   - Nỗi sợ: ${nv.noi_so}\n\n`;
+    });
+    
+    text += `\n==================================================\n`;
+    text += `CHI TIẾT CÁC TẬP KỊCH BẢN CHI TIẾT\n`;
+    text += `==================================================\n\n`;
+    
+    let writtenCount = 0;
+    store.danh_muc_chuong.forEach(ch => {
+      text += `--------------------------------------------------\n`;
+      text += `${ch.tieu_de.toUpperCase()}\n`;
+      text += `Sự kiện: ${ch.tom_tat_su_kien}\n`;
+      text += `--------------------------------------------------\n\n`;
+      if (ch.da_viet) {
+        text += ch.noi_dung_kich_ban;
+        writtenCount++;
+      } else {
+        text += `[Chương này chưa được tiến hành viết nội dung chi tiết bằng AI]`;
+      }
+      text += `\n\n\n`;
+    });
+    
+    text += `\n==================================================\n`;
+    text += `Tổng số chương thiết lập: ${store.danh_muc_chuong.length}\n`;
+    text += `Số chương đã hoàn thành: ${writtenCount}\n`;
+    text += `Ngày tạo: ${new Date().toLocaleDateString("vi-VN")}\n`;
+    text += `==================================================\n`;
+    
+    triggerDownload(`${title.toLowerCase().replace(/[^a-z0-9]/g, "-")}-kich-ban-full.txt`, text);
   };
 
-  // Select Chapter from Sidebar Grid
-  const handleSelectChapter = (index) => {
-    if (store.isGeneratingOutline || store.isWritingChapter) return;
-    store.selectChapter(index);
-  };
-
-  // Chapter pagination navigator
-  const handleNavigateChapter = (direction) => {
-    if (store.isGeneratingOutline || store.isWritingChapter) return;
-    store.navigateChapter(direction);
-  };
-
-  // Download raw text file helper
+  // Helper download trigger
   const triggerDownload = (filename, text) => {
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -86,147 +136,105 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
-  // Export Full Novel Text file
-  const handleExportFullNovel = () => {
-    if (store.isGeneratingOutline || store.isWritingChapter) return;
-    
-    const title = store.novelTitle || "AI-Kich-Ban-Tieu-Thuyet";
-    
-    let text = `==================================================\n`;
-    text += `TÁC PHẨM SINH BỞI AI NOVEL GENERATOR - LOGIC CỨNG\n`;
-    text += `TÊN TRUYỆN: ${title.toUpperCase()}\n`;
-    text += `==================================================\n\n`;
-    
-    text += store.outlineText;
-    text += `\n\n==================================================\n`;
-    text += `CHI TIẾT CÁC CHƯƠNG\n`;
-    text += `==================================================\n\n`;
-    
-    let writtenChaptersCount = 0;
-    store.chapters.forEach(ch => {
-      text += `--------------------------------------------------\n`;
-      text += `Chương ${ch.number}: ${ch.title.split(": ")[1] || ch.title}\n`;
-      text += `--------------------------------------------------\n\n`;
-      if (ch.written) {
-        text += ch.content;
-        writtenChaptersCount++;
-      } else {
-        text += `[Chương này chưa được tiến hành viết nội dung chi tiết bằng AI]`;
-      }
-      text += `\n\n\n`;
-    });
-    
-    text += `\n==================================================\n`;
-    text += `Tổng số chương thiết lập: ${store.chapters.length}\n`;
-    text += `Số chương đã viết thành công: ${writtenChaptersCount}\n`;
-    text += `Ngày tạo kịch bản: ${new Date().toLocaleDateString("vi-VN")}\n`;
-    text += `==================================================\n`;
-    
-    const safeFilename = title.toLowerCase().replace(/[^a-z0-9]/g, "-") + "-full.txt";
-    triggerDownload(safeFilename, text);
-  };
-
-  // Download active view (.txt)
-  const handleDownloadActiveView = () => {
-    if (store.isGeneratingOutline || store.isWritingChapter) return;
-    
-    const title = store.novelTitle || "AI-Kich-Ban";
-    const prefix = title.toLowerCase().replace(/[^a-z0-9]/g, "-");
-    
-    if (store.activeTab === "outline") {
-      triggerDownload(`${prefix}-dan-y.txt`, store.outlineText);
-    } else {
-      const ch = store.chapters[store.activeChapterIndex];
-      if (!ch || !ch.written) {
-        alert("Chương này chưa có nội dung để tải về!");
-        return;
-      }
-      let txt = `Chương ${ch.number}: ${ch.title.split(": ")[1] || ch.title}\n\n${ch.content}`;
-      triggerDownload(`${prefix}-chuong-${ch.number}.txt`, txt);
-    }
-  };
-
-  // Copy active text to Clipboard
+  // Copy current content to clipboard
   const handleCopyToClipboard = () => {
-    if (store.isGeneratingOutline || store.isWritingChapter) return;
-    
     let text = "";
-    if (store.activeTab === "outline") {
-      text = store.outlineText;
-    } else {
-      const ch = store.chapters[store.activeChapterIndex];
-      if (!ch || !ch.written) {
-        alert("Chương này chưa có nội dung để sao chép!");
+    if (store.pipelineStep === 2) {
+      text = store.outlineBranches[store.activeOutlineBranch];
+    } else if (store.pipelineStep === 4) {
+      if (!activeChapter || !activeChapter.da_viet) {
+        alert("Chương này chưa có nội dung kịch bản để sao chép!");
         return;
       }
-      text = `Chương ${ch.number}: ${ch.title.split(": ")[1] || ch.title}\n\n${ch.content}`;
+      text = `${activeChapter.tieu_de}\n\n${activeChapter.noi_dung_kich_ban}`;
+    } else {
+      alert("Không có nội dung dạng văn bản thích hợp để sao chép ở bước này!");
+      return;
     }
     
     navigator.clipboard.writeText(text)
-      .then(() => {
-        alert("Đã sao chép nội dung vào khay nhớ tạm!");
-      })
-      .catch(err => {
-        console.error("Không thể sao chép: ", err);
-      });
+      .then(() => alert("Đã sao chép nội dung vào khay nhớ tạm!"))
+      .catch(err => console.error("Không thể sao chép: ", err));
   };
 
-  // Reset entire application back to Phase 1
+  // Full reset back to step 1
   const handleConfirmReset = () => {
     if (store.isGeneratingOutline || store.isWritingChapter) return;
-    
-    if (window.confirm("Bạn có chắc chắn muốn làm mới? Toàn bộ nội dung kịch bản hiện tại sẽ bị xóa sạch.")) {
+    if (window.confirm("Bạn có chắc chắn muốn làm mới toàn bộ quy trình? Mọi dữ liệu dàn ý, nhân vật và kịch bản đã viết sẽ bị xóa vĩnh viễn.")) {
       store.reset();
     }
   };
 
+  // Save Settings API keys
   const handleSaveApiKeys = () => {
-    const keys = keyInputText
-      .split("\n")
-      .map(k => k.trim())
-      .filter(k => k.length > 0);
+    const keys = keyInputText.split("\n").map(k => k.trim()).filter(Boolean);
     store.setApiKeys(keys);
     setIsSettingsOpen(false);
-    alert(`Đã lưu ${keys.length} API Keys thành công!`);
+    alert(`Đã lưu thành công ${keys.length} API Keys Gemini!`);
   };
 
-  const activeChapter = store.chapters[store.activeChapterIndex];
-  
-  // Lọc danh sách hành vi bị cấm hiện tại của somatic feedback + Chấn thương vật lý
-  const currentForbidden = FORBIDDEN_MOVES.filter(m => {
-    if (m.minFatigue && store.fatigue >= m.minFatigue) return true;
-    if (m.minToxin && store.toxin >= m.minToxin) return true;
-    return false;
-  }).map(m => ({ move: m.move }));
-
-  // Nạp chấn thương vật lý
-  store.injuries.forEach(inj => {
-    currentForbidden.push({
-      move: `Bị thương ở ${inj.part} (Độ đau ${inj.pain}/10): ${inj.consequence}`
+  // Add new character manually in Step 3
+  const handleAddCharacter = (e) => {
+    e.preventDefault();
+    if (!newCharName.trim() || !newCharTraits.trim()) {
+      alert("Vui lòng điền tối thiểu Tên và Đặc điểm/Giới hạn cơ thể!");
+      return;
+    }
+    store.addNhanVat({
+      ten: newCharName.trim(),
+      dac_diem: newCharTraits.trim(),
+      vat_dung_ky_nhan: newCharItem.trim() || "Bật lửa đồng, bình nước sắt",
+      muc_tieu: newCharGoal.trim() || "Sống sót và tìm nước",
+      noi_so: newCharFear.trim() || "Drone săn mồi cơ khí"
     });
-  });
+    setNewCharName("");
+    setNewCharTraits("");
+    setNewCharItem("");
+    setNewCharGoal("");
+    setNewCharFear("");
+  };
 
-  const parsedProps = store.signatureProps
-    .split(",")
-    .map(p => p.trim())
-    .filter(Boolean);
+  // Save manually edited chapter script
+  const handleSaveEditedScript = () => {
+    if (!activeChapter) return;
+    const updatedChapters = [...store.danh_muc_chuong];
+    updatedChapters[store.activeChapterIndex] = {
+      ...activeChapter,
+      noi_dung_kich_ban: scriptEditText,
+      da_viet: true
+    };
+    store.set({
+      danh_muc_chuong: updatedChapters,
+      chapters: updatedChapters.map(c => ({
+        number: c.so_chuong,
+        title: c.tieu_de,
+        content: c.noi_dung_kich_ban,
+        written: c.da_viet
+      }))
+    });
+    setIsEditingScript(false);
+    store.scanSignatureProps(scriptEditText);
+    store.calculateWordCount(scriptEditText);
+  };
+
+  // Setup signatures detection
+  const parsedProps = store.signatureProps.split(",").map(p => p.trim()).filter(Boolean);
 
   return (
-    <div className="app-container bg-[#080808] text-zinc-300 min-h-screen font-sans antialiased relative">
+    <div className="app-container bg-[#050505] text-zinc-300 min-h-screen font-sans antialiased flex flex-col relative select-none">
       
-      {/* HEADER TÁC PHẨM CẬP NHẬT GIAO DIỆN PREMIUM */}
-      <header className="h-16 border-b border-zinc-900 px-6 flex items-center justify-between shrink-0 bg-[#0d0d0d] sticky top-0 z-40 select-none">
+      {/* 1. PREMIUM HEADER */}
+      <header className="h-16 border-b border-zinc-900 px-6 flex items-center justify-between shrink-0 bg-[#0a0a0a] sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded bg-orange-600 flex items-center justify-center font-bold text-white shadow-md shadow-orange-950/20">
-            ☢️
+          <div className="w-9 h-9 rounded bg-orange-600 flex items-center justify-center font-bold text-white shadow-md shadow-orange-950/20 text-lg">
+            ✍️
           </div>
           <div>
-            <h1 className="text-sm font-bold text-white tracking-wider font-heading">CHUYÊN GIA MẠT THẾ</h1>
-            <p className="text-[10px] text-zinc-500 tracking-wide uppercase font-mono">Trợ lý kịch bản logic cứng v2.0</p>
+            <h1 className="text-sm font-extrabold text-white tracking-widest font-heading">PRODUCTION ASSISTANT</h1>
+            <p className="text-[10px] text-orange-500 font-bold tracking-wider uppercase font-mono">Trợ lý Biên kịch Sản xuất kịch bản mạt thế</p>
           </div>
         </div>
 
-        {/* NÚT CÀI ĐẶT RĂNG CƯA */}
         <div className="flex items-center gap-4">
           {store.rotationMessage && (
             <span className="text-[11px] font-mono text-amber-500 animate-pulse bg-amber-950/20 border border-amber-900/30 px-2 py-0.5 rounded">
@@ -244,905 +252,842 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ==================== GIAI ĐOẠN 1: MÀN HÌNH SETUP BAN ĐẦU ==================== */}
-      <main id="phase-1" className={`phase ${store.phase === 1 ? 'active' : 'hidden'}`}>
-        <div className="max-w-4xl mx-auto px-6 py-12">
-          
-          <header className="setup-header text-center mb-10">
-            <span className="inline-block text-xs px-3 py-1 rounded bg-orange-950/40 border border-orange-900/30 text-orange-500 font-bold uppercase tracking-widest mb-3">
-              ☢️ Wasteland Somatic Engine
-            </span>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight uppercase mb-3 font-heading">
-              Biên kịch Mạt thế Logic Cứng
-            </h1>
-            <p className="text-zinc-500 max-w-xl mx-auto text-sm">
-              Bộ lọc logic ngăn chặn tuyệt đối trạng thái AI viết bừa, "buff bẩn". Kiểm soát nghiêm ngặt thể chất phàm nhân và quy luật hệ sinh thái 8 tầng.
-            </p>
-          </header>
-
-          <form id="setup-form" onSubmit={handleStartOutline} className="space-y-8 bg-[#0d0d0d] border border-zinc-900 rounded-xl p-8 shadow-xl">
-            
-            {/* 1. KHỐI CHỦ ĐỀ (THEME) */}
-            <div className="form-section">
-              <div className="section-title-wrapper flex items-center justify-between mb-4 pb-2 border-b border-zinc-900">
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider font-heading">1. CHỦ ĐỀ CHÍNH</h2>
-                <span className="text-xs px-2.5 py-0.5 rounded bg-orange-950/50 text-orange-400 font-bold font-mono border border-orange-900/20">{store.theme}</span>
-              </div>
-              
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {[
-                  { value: 'Sinh Tồn', desc: 'Vật lộn sống sót khốc liệt, khan hiếm.', icon: '🎒' },
-                  { value: 'Trùng Sinh', desc: 'Trở lại quá khứ, báo thù dựa trên logic.', icon: '⏳' },
-                  { value: 'Xuyên Không', desc: 'Sử dụng tri thức hiện đại đè bẹp cổ đại.', icon: '🌀' },
-                  { value: 'Hệ Thống', desc: 'Giao diện tính toán cơ học phàm nhân.', icon: '🖥️' },
-                  { value: 'Thám Hiểm', desc: 'Khai thác phế tích cổ đại đầy cạm bẫy.', icon: '🧭' },
-                  { value: 'Tự Do', desc: 'Tùy chỉnh cốt truyện mạt thế phóng khoáng.', icon: '🎲' }
-                ].map((t) => (
-                  <div 
-                    key={t.value} 
-                    className={`border p-4 rounded-lg cursor-pointer transition-all ${store.theme === t.value ? 'bg-orange-950/15 border-orange-600 shadow-md shadow-orange-950/10' : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800'}`}
-                    onClick={() => store.setTheme(t.value)}
-                  >
-                    <div className="text-2xl mb-1">{t.icon}</div>
-                    <div className="font-bold text-sm text-white">{t.value}</div>
-                    <div className="text-[11px] text-zinc-500 mt-0.5">{t.desc}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 2. KHỐI PHONG CÁCH (STYLE) */}
-            <div className="form-section">
-              <div className="section-title-wrapper flex items-center justify-between mb-4 pb-2 border-b border-zinc-900">
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider font-heading">2. PHONG CÁCH CHẤP BÚT</h2>
-                <span className="text-xs px-2.5 py-0.5 rounded bg-blue-950/50 text-blue-400 font-bold font-mono border border-blue-900/20">{store.style}</span>
-              </div>
-              
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {[
-                  { value: 'Mạt Thế', desc: 'Thế giới sụp đổ, phóng xạ, tang thi.', icon: '☣️' },
-                  { value: 'Huyền Huyễn', desc: 'Yếu tố ma pháp thần bí thô ráp cổ xưa.', icon: '🪐' },
-                  { value: 'Tu Tiên', desc: 'Đạo pháp lạnh lùng, tài nguyên suy kiệt.', icon: '⚔️' },
-                  { value: 'Đô Thị Mạt Thế', desc: 'Thương trường pha lẫn hoang tàn phế tích.', icon: '🏙️' },
-                  { value: 'Viễn Tưởng', desc: 'Cyberpunk rỉ sét, AI biến dị nổi loạn.', icon: '🤖' },
-                  { value: 'Khắc Nghiệt', desc: 'Tả thực gai góc, bạo lực sinh học trần trụi.', icon: '🔥' }
-                ].map((s) => (
-                  <div 
-                    key={s.value} 
-                    className={`border p-4 rounded-lg cursor-pointer transition-all ${store.style === s.value ? 'bg-blue-950/15 border-blue-600 shadow-md shadow-blue-950/10' : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800'}`}
-                    onClick={() => store.setStyle(s.value)}
-                  >
-                    <div className="text-2xl mb-1">{s.icon}</div>
-                    <div className="font-bold text-sm text-white">{s.value}</div>
-                    <div className="text-[11px] text-zinc-500 mt-0.5">{s.desc}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 3. MÔ TẢ Ý TƯỞNG CỐT TRUYỆN */}
-            <div className="form-section">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-bold text-white uppercase tracking-wider font-heading">3. Ý tưởng kịch bản gốc</label>
-                <button
-                  type="button"
-                  onClick={() => store.generateAIPrompt()}
-                  className="px-3 py-1 text-xs rounded-full bg-orange-950/45 hover:bg-orange-900/60 border border-orange-500/30 text-orange-400 font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                >
-                  ✨ AI Tự Tạo Ý Tưởng
-                </button>
-              </div>
-              <textarea 
-                className="w-full h-24 p-3 bg-zinc-950 border border-zinc-900 rounded-lg text-sm text-zinc-300 focus:outline-none focus:border-zinc-800 placeholder-zinc-700" 
-                value={store.prompt}
-                onChange={(e) => store.setPrompt(e.target.value)}
-                placeholder="Ví dụ: Tiêu Hàn là phàm nhân bị rách gân gót chân phải, ẩn nấp trong phế tích lò phản ứng hạt nhân Ninh Thuận cũ, sở hữu chiếc bật lửa đồng rỉ sét và phải tìm mọi cách vượt qua sự lùng sục gắt gao của Drone Săn Mồi Độc Lập..."
-              />
-            </div>
-
-            {/* 4. QUY MÔ KỊCH BẢN */}
-            <div className="form-section flex items-center justify-between bg-zinc-950 border border-zinc-900 p-4 rounded-lg">
-              <div>
-                <h3 className="font-bold text-sm text-white uppercase font-heading">4. Quy mô kịch bản</h3>
-                <p className="text-[11px] text-zinc-500 mt-0.5">Xác định tổng số chương cho kịch bản</p>
-              </div>
-              <div className="flex items-center gap-3 bg-[#0d0d0d] border border-zinc-800 rounded p-1.5">
-                <button type="button" className="w-8 h-8 rounded hover:bg-zinc-900 text-lg font-bold" onClick={() => store.stepChapters(-1)}>-</button>
-                <div className="text-center font-mono font-bold text-sm w-16">
-                  {store.chaptersCount} <span className="text-[10px] text-zinc-500 font-normal">TẬP</span>
-                </div>
-                <button type="button" className="w-8 h-8 rounded hover:bg-zinc-900 text-lg font-bold" onClick={() => store.stepChapters(1)}>+</button>
-              </div>
-            </div>
-
-            {/* TIẾN HÀNH SINH KỊCH BẢN AI */}
-            <div className="pt-4 border-t border-zinc-900 text-center">
-              <button 
-                type="submit" 
-                className="w-full py-3.5 rounded-lg bg-orange-600 hover:bg-orange-500 transition-colors font-bold text-sm text-white tracking-widest cursor-pointer shadow-lg shadow-orange-950/20 uppercase"
+      {/* 2. PIPELINE STEPPER HUD */}
+      <div className="w-full bg-[#080808] border-b border-zinc-900 py-3.5 px-6 flex items-center justify-between shrink-0 font-mono text-xs select-none shadow-md">
+        <div className="flex items-center gap-2 md:gap-4 overflow-x-auto scrollbar-none w-full justify-center">
+          {[
+            { step: 1, label: "Ý TƯỞNG CORE" },
+            { step: 2, label: "DÀN Ý TỔNG THỂ (GATE 1)" },
+            { step: 3, label: "HỒ SƠ NHÂN VẬT (GATE 2)" },
+            { step: 4, label: "KỊCH BẢN TẬP CHI TIẾT" }
+          ].map((s) => (
+            <React.Fragment key={s.step}>
+              <button
+                onClick={() => {
+                  if (s.step < store.pipelineStep && !store.isGeneratingOutline && !store.isWritingChapter) {
+                    store.setPipelineStep(s.step);
+                  }
+                }}
+                disabled={s.step > store.pipelineStep || store.isGeneratingOutline || store.isWritingChapter}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded transition-all border ${
+                  store.pipelineStep === s.step
+                    ? "bg-orange-600/15 text-orange-400 font-extrabold border-orange-500/40 shadow-md shadow-orange-950/5 scale-105"
+                    : s.step < store.pipelineStep
+                    ? "text-emerald-500 hover:text-emerald-400 border-emerald-950/20 bg-emerald-950/5 cursor-pointer font-bold"
+                    : "text-zinc-650 border-transparent cursor-not-allowed"
+                }`}
               >
-                ✦ Khởi tạo Dàn ý kịch bản chính thức ✦
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                  store.pipelineStep === s.step
+                    ? "bg-orange-600 text-white"
+                    : s.step < store.pipelineStep
+                    ? "bg-emerald-600 text-white"
+                    : "bg-zinc-900 text-zinc-600"
+                }`}>
+                  {s.step < store.pipelineStep ? "✓" : s.step}
+                </span>
+                <span>{s.label}</span>
               </button>
-            </div>
-
-          </form>
+              {s.step < 4 && <span className="text-zinc-800 font-bold hidden md:inline">➔</span>}
+            </React.Fragment>
+          ))}
         </div>
-      </main>
+      </div>
 
-      {/* ==================== GIAI ĐOẠN 2: WORKSPACE CHÍNH ==================== */}
-      <main id="phase-2" className={`phase ${store.phase === 2 ? 'block' : 'hidden'}`}>
-        <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)] overflow-hidden">
-          
-          {/* CỘT TRÁI: SIDEBAR ĐIỀU KHIỂN & BỘ LỌC LOGIC CỨNG (30% WIDTH) */}
-          <aside className="w-full lg:w-96 border-r border-zinc-900 bg-[#0c0c0c] p-6 overflow-y-auto shrink-0 flex flex-col justify-between">
-            <div className="space-y-6">
-              
-              {/* Tên tác phẩm */}
+      {/* 3. STEP CONTENT SWITCHER */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+
+        {/* ==================== BƯỚC 1: Ý TƯỞNG CORE ==================== */}
+        {store.pipelineStep === 1 && (
+          <div className="flex-1 overflow-y-auto px-6 py-10 max-w-4xl mx-auto w-full select-text">
+            <header className="text-center mb-8">
+              <span className="inline-block text-xs px-3 py-1 rounded bg-orange-950/40 border border-orange-900/30 text-orange-400 font-bold uppercase tracking-widest mb-3">
+                Phase 1: Setup Foundation
+              </span>
+              <h2 className="text-3xl font-black text-white uppercase mb-2 font-heading tracking-tight">
+                Thiết Thiết Ý Tưởng Cốt Truyện
+              </h2>
+              <p className="text-zinc-500 max-w-xl mx-auto text-sm leading-relaxed">
+                Thiết lập các tham số cốt lõi và số lượng từ. AI sẽ chia kịch bản thành cấu trúc 3 hồi chuẩn công nghiệp kịch bản trước khi phân rã.
+              </p>
+            </header>
+
+            <form onSubmit={handleStartOutline} className="space-y-6 bg-[#0c0c0c] border border-zinc-900 rounded-xl p-8 shadow-xl">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Chủ đề chính */}
+                <div>
+                  <label className="block text-xs font-bold text-white uppercase tracking-wider mb-2 font-mono">1. CHỦ ĐỀ CHÍNH</label>
+                  <select 
+                    className="w-full bg-zinc-950 border border-zinc-900 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-orange-500/50 cursor-pointer"
+                    value={store.theme}
+                    onChange={(e) => store.setTheme(e.target.value)}
+                  >
+                    <option value="Sinh Tồn">🎒 Mạt thế Sinh Tồn thô ráp</option>
+                    <option value="Trùng Sinh">⏳ Trùng Sinh báo thù logic</option>
+                    <option value="Xuyên Không">🌀 Xuyên Không khai phá phế tích</option>
+                    <option value="Hệ Thống">🖥️ Hệ Thống đếm số cơ học</option>
+                    <option value="Thám Hiểm">🧭 Thám Hiểm mộ hoang mạt thế</option>
+                  </select>
+                </div>
+
+                {/* Phong cách chấp bút */}
+                <div>
+                  <label className="block text-xs font-bold text-white uppercase tracking-wider mb-2 font-mono">2. PHONG CÁCH HÀNH VĂN</label>
+                  <select 
+                    className="w-full bg-zinc-950 border border-zinc-900 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-orange-500/50 cursor-pointer"
+                    value={store.style}
+                    onChange={(e) => store.setStyle(e.target.value)}
+                  >
+                    <option value="Mạt Thế">☣️ Mạt Thế tang thi, phóng xạ</option>
+                    <option value="Viễn Tưởng">🤖 Cyberpunk hoang tàn rỉ sét</option>
+                    <option value="Huyền Huyễn">🪐 Thần bí tàn tích cổ xưa</option>
+                    <option value="Tu Tiên">⚔️ Tu Tiên tài nguyên khô cạn</option>
+                    <option value="Khắc Nghiệt">🔥 Gai góc, tả thực bạo lực sinh học</option>
+                  </select>
+                </div>
+
+              </div>
+
+              {/* Word count target gates */}
+              <div className="border border-zinc-900 rounded-lg p-4 bg-zinc-950/40">
+                <label className="block text-xs font-bold text-white uppercase tracking-wider mb-3 font-mono">3. ĐỊNH HÌNH CỔNG TỪ (WORD-GATE TARGET)</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] text-zinc-500 font-mono block mb-1">ĐỘ DÀI TỐI THIỂU (TỪ)</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-zinc-950 border border-zinc-900 rounded p-2 text-xs font-mono font-bold focus:outline-none focus:border-zinc-800"
+                      value={store.minWordCount}
+                      onChange={(e) => store.setMinWordCount(parseInt(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-zinc-500 font-mono block mb-1">ĐỘ DÀI TỐI ĐA (TỪ)</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-zinc-950 border border-zinc-900 rounded p-2 text-xs font-mono font-bold focus:outline-none focus:border-zinc-800"
+                      value={store.maxWordCount}
+                      onChange={(e) => store.setMaxWordCount(parseInt(e.target.value) || 0)}
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-2 font-mono">* Mặc định chuẩn vàng biên kịch: 3.910 - 4.590 từ tiếng Việt.</p>
+              </div>
+
+              {/* Ý tưởng cốt truyện */}
               <div>
-                <label className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest block mb-1">TÊN TÁC PHẨM</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-zinc-950 border border-zinc-900 rounded p-2.5 text-sm font-bold text-white focus:outline-none focus:border-zinc-800" 
-                  value={store.novelTitle}
-                  disabled={store.isGeneratingOutline || store.isWritingChapter}
-                  onChange={(e) => store.setNovelTitle(e.target.value)}
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-white uppercase tracking-wider font-mono">4. Ý TƯỞNG KỊCH BẢN GỐC</label>
+                  <button
+                    type="button"
+                    onClick={() => store.generateAIPrompt()}
+                    className="px-3 py-1 text-xs rounded-full bg-orange-950/50 hover:bg-orange-900/60 border border-orange-500/20 text-orange-400 font-extrabold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    ✨ AI Tự Tạo Ý Tưởng
+                  </button>
+                </div>
+                <textarea 
+                  className="w-full h-28 p-3 bg-zinc-950 border border-zinc-900 rounded-lg text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 placeholder-zinc-750 leading-relaxed font-sans" 
+                  value={store.prompt}
+                  onChange={(e) => store.setPrompt(e.target.value)}
+                  placeholder="Ví dụ: Tiêu Hàn là phàm nhân bị liệt một tay trái, ẩn nấp trong phế tích ga tàu điện cũ ngập nước đen phóng xạ. Anh sở hữu bình nước vỏ sắt cũ móp méo và phải tìm cách thoát khỏi sương phóng xạ ăn mòn cùng bầy quái vật Tầng 2..."
                 />
               </div>
 
-              {/* Lưới chọn chương */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">DANH SÁCH CHƯƠNG</label>
-                  <span className="text-[10px] font-mono bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">
-                    {store.chapters.length} Chương
-                  </span>
+              {/* Số chương */}
+              <div className="flex items-center justify-between bg-zinc-950 border border-zinc-900 p-4 rounded-lg">
+                <div>
+                  <h3 className="font-bold text-xs text-white uppercase font-mono">5. Số chương thiết lập</h3>
+                  <p className="text-[10px] text-zinc-550 mt-0.5 font-mono">Quy mô phân phối cốt truyện</p>
                 </div>
-                
-                <div className="grid grid-cols-5 gap-1.5 max-h-36 overflow-y-auto pr-1">
-                  {store.chapters.map((ch, i) => (
+                <div className="flex items-center gap-3 bg-[#0c0c0c] border border-zinc-800 rounded p-1.5 font-mono">
+                  <button type="button" className="w-8 h-8 rounded hover:bg-zinc-900 text-lg font-bold text-zinc-400 hover:text-white" onClick={() => store.stepChapters(-1)}>-</button>
+                  <div className="text-center font-bold text-sm w-16">
+                    {store.chaptersCount} <span className="text-[10px] text-zinc-500 font-normal">TẬP</span>
+                  </div>
+                  <button type="button" className="w-8 h-8 rounded hover:bg-zinc-900 text-lg font-bold text-zinc-400 hover:text-white" onClick={() => store.stepChapters(1)}>+</button>
+                </div>
+              </div>
+
+              {/* SUBMIT BUTTON */}
+              <div className="pt-4">
+                <button 
+                  type="submit" 
+                  className="w-full py-4 rounded-lg bg-orange-600 hover:bg-orange-500 transition-colors font-extrabold text-xs text-white tracking-widest cursor-pointer shadow-lg shadow-orange-950/20 uppercase"
+                >
+                  ✦ TIẾN HÀNH KHỞI TẠO DÀN Ý TỔNG THỂ ✦
+                </button>
+              </div>
+
+            </form>
+          </div>
+        )}
+
+        {/* ==================== BƯỚC 2: DÀN Ý TỔNG THỂ (GATE 1) ==================== */}
+        {store.pipelineStep === 2 && (
+          <div className="flex-1 overflow-hidden flex flex-col select-text">
+            {/* Top Sub-navigation for Branching Outline */}
+            <div className="h-14 border-b border-zinc-900 bg-[#0a0a0a] px-6 flex items-center justify-between shrink-0 select-none">
+              <div className="flex gap-2">
+                {[0, 1, 2].map((idx) => {
+                  const generated = store.selectedBranchGenerated[idx];
+                  return (
                     <button
-                      key={ch.number}
-                      onClick={() => handleSelectChapter(i)}
-                      disabled={store.isGeneratingOutline || store.isWritingChapter}
-                      className={`h-9 rounded text-xs font-mono font-bold transition-all border cursor-pointer ${
-                        ch.written
-                          ? i === store.activeChapterIndex
-                            ? 'bg-emerald-600 border-emerald-500 text-white shadow shadow-emerald-950/20'
-                            : 'bg-emerald-950/25 border-emerald-900/30 text-emerald-400 hover:border-emerald-800'
-                          : i === store.activeChapterIndex
-                            ? 'bg-orange-600 border-orange-500 text-white shadow shadow-orange-950/20'
-                            : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800 text-zinc-500'
+                      key={idx}
+                      onClick={() => store.setActiveOutlineBranch(idx)}
+                      disabled={store.isGeneratingOutline}
+                      className={`text-xs font-bold px-4 py-2 rounded transition-all cursor-pointer ${
+                        store.activeOutlineBranch === idx
+                          ? "bg-orange-600 text-white font-extrabold shadow shadow-orange-950/30"
+                          : "bg-zinc-900/60 border border-zinc-850 hover:bg-zinc-800 text-zinc-400"
                       }`}
                     >
-                      {ch.number}
+                      Nhánh {idx + 1} {generated ? "✓" : ""}
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
 
-              {/* CHỈ SỐ SINH TỒN HUD */}
-              <div className="border border-zinc-900 rounded-lg p-4 bg-zinc-950/40 space-y-3">
-                <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">📊 TÀI NGUYÊN SINH TỒN</span>
-                <div className="grid grid-cols-2 gap-3">
-                  
-                  {/* Nước */}
-                  <div className="bg-zinc-950 border border-zinc-900 rounded p-2 flex flex-col justify-between">
-                    <div className="flex justify-between items-center text-[10px] font-mono mb-1">
-                      <span className="text-blue-400">💧 NƯỚC</span>
-                      <span className="font-bold text-zinc-300">{store.water}%</span>
-                    </div>
-                    <div className="w-full bg-zinc-900 rounded-full h-1.5 mb-1.5 overflow-hidden">
-                      <div className="bg-blue-500 h-full transition-all duration-300" style={{ width: `${store.water}%` }}></div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button 
-                        type="button" 
-                        onClick={() => store.setWater(Math.max(0, store.water - 10))}
-                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        -10%
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => store.setWater(Math.min(100, store.water + 10))}
-                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        +10%
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Lương thực */}
-                  <div className="bg-zinc-950 border border-zinc-900 rounded p-2 flex flex-col justify-between">
-                    <div className="flex justify-between items-center text-[10px] font-mono mb-1">
-                      <span className="text-amber-500">🍞 LƯƠNG THỰC</span>
-                      <span className="font-bold text-zinc-300">{store.food}%</span>
-                    </div>
-                    <div className="w-full bg-zinc-900 rounded-full h-1.5 mb-1.5 overflow-hidden">
-                      <div className="bg-amber-600 h-full transition-all duration-300" style={{ width: `${store.food}%` }}></div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button 
-                        type="button" 
-                        onClick={() => store.setFood(Math.max(0, store.food - 10))}
-                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        -10%
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => store.setFood(Math.min(100, store.food + 10))}
-                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        +10%
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Đạn dược */}
-                  <div className="bg-zinc-950 border border-zinc-900 rounded p-2 flex flex-col justify-between">
-                    <div className="flex justify-between items-center text-[10px] font-mono mb-1">
-                      <span className="text-red-400">🔫 ĐẠN DƯỢC</span>
-                      <span className="font-bold text-zinc-300">{store.ammo} viên</span>
-                    </div>
-                    <div className="flex items-center gap-1 mt-1">
-                      <button 
-                        type="button" 
-                        onClick={() => store.setAmmo(Math.max(0, store.ammo - 1))}
-                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        -1 viên
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => store.setAmmo(store.ammo + 1)}
-                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        +1 viên
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Dây rút */}
-                  <div className="bg-zinc-950 border border-zinc-900 rounded p-2 flex flex-col justify-between">
-                    <div className="flex justify-between items-center text-[10px] font-mono mb-1">
-                      <span className="text-emerald-400">⛓️ DÂY RÚT</span>
-                      <span className="font-bold text-zinc-300">{store.cableTies} sợi</span>
-                    </div>
-                    <div className="flex items-center gap-1 mt-1">
-                      <button 
-                        type="button" 
-                        onClick={() => store.setCableTies(Math.max(0, store.cableTies - 1))}
-                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        -1 sợi
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => store.setCableTies(store.cableTies + 1)}
-                        className="w-full py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        +1 sợi
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-
-              {/* BỘ LỌC CỨNG LOGIC & CHỈ SỐ (ACCORDION SECTIONS) */}
-              <div className="border border-zinc-900 rounded-lg overflow-hidden bg-[#080808]">
-                
-                {/* HEADERS SELECT TABS */}
-                <div className="grid grid-cols-4 border-b border-zinc-900 bg-zinc-950 text-[10px] font-mono font-bold select-none text-center">
-                  <button 
-                    onClick={() => setExpandedSection("somatic")}
-                    className={`py-2 border-r border-zinc-900 transition-colors ${expandedSection === "somatic" ? "bg-orange-950/20 text-orange-400" : "text-zinc-500 hover:text-zinc-300"}`}
-                  >
-                    🩸 THÂN THỂ
-                  </button>
-                  <button 
-                    onClick={() => setExpandedSection("genius")}
-                    className={`py-2 border-r border-zinc-900 transition-colors ${expandedSection === "genius" ? "bg-blue-950/20 text-blue-400" : "text-zinc-500 hover:text-zinc-300"}`}
-                  >
-                    ⚙️ TÁC CHIẾN
-                  </button>
-                  <button 
-                    onClick={() => setExpandedSection("trophic")}
-                    className={`py-2 border-r border-zinc-900 transition-colors ${expandedSection === "trophic" ? "bg-yellow-950/20 text-yellow-400" : "text-zinc-500 hover:text-zinc-300"}`}
-                  >
-                    ☢️ TROPHIC
-                  </button>
-                  <button 
-                    onClick={() => setExpandedSection("props")}
-                    className={`py-2 transition-colors ${expandedSection === "props" ? "bg-emerald-950/20 text-emerald-400" : "text-zinc-500 hover:text-zinc-300"}`}
-                  >
-                    🎒 CỔNG TỪ
-                  </button>
-                </div>
-
-                {/* CONTENT AREA FOR EACH FILTER TAB */}
-                <div className="p-4 space-y-4">
-                  
-                  {/* TAB 1: VÒNG LẶP PHẢN HỒI CƠ THỂ */}
-                  {expandedSection === "somatic" && (
-                    <div className="space-y-4">
-                      <div>
-                        <h4 className="text-xs font-bold text-white mb-2 uppercase flex items-center justify-between font-heading">
-                          <span>Chỉ số cơ thể phàm nhân</span>
-                          {currentForbidden.length > 0 && (
-                            <span className="text-[10px] bg-red-950 border border-red-900 px-1.5 py-0.5 rounded text-red-500 font-mono animate-pulse">
-                              ⚠️ Vượt ngưỡng!
-                            </span>
-                          )}
-                        </h4>
-                        
-                        <div className="space-y-3">
-                          {/* Fatigue Slider */}
-                          <div>
-                            <div className="flex justify-between text-xs font-mono mb-1">
-                              <span className="text-zinc-500">Mức kiệt sức (Fatigue)</span>
-                              <span className={`font-bold ${store.fatigue > 60 ? 'text-red-500' : 'text-zinc-300'}`}>{store.fatigue}%</span>
-                            </div>
-                            <input 
-                              type="range" 
-                              min="0" max="100" 
-                              value={store.fatigue}
-                              onChange={(e) => store.setFatigue(parseInt(e.target.value))}
-                              className="w-full accent-orange-600 h-1 bg-zinc-900 rounded-lg cursor-pointer"
-                            />
-                          </div>
-
-                          {/* Toxin Slider */}
-                          <div>
-                            <div className="flex justify-between text-xs font-mono mb-1">
-                              <span className="text-zinc-500">Mức nhiễm độc (Toxin)</span>
-                              <span className={`font-bold ${store.toxin > 60 ? 'text-red-500' : 'text-zinc-300'}`}>{store.toxin}%</span>
-                            </div>
-                            <input 
-                              type="range" 
-                              min="0" max="100" 
-                              value={store.toxin}
-                              onChange={(e) => store.setToxin(parseInt(e.target.value))}
-                              className="w-full accent-red-600 h-1 bg-zinc-900 rounded-lg cursor-pointer"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Forbidden Moves Box */}
-                      <div className="border border-zinc-900 rounded bg-zinc-950/50 p-3 space-y-2">
-                        <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wide block">HÀNH VI BỊ CẤM CỦA PHÀM NHÂN</span>
-                        {currentForbidden.length === 0 ? (
-                          <p className="text-xs text-zinc-600 italic">Chỉ số sinh học an toàn. Không có hành vi bị cấm.</p>
-                        ) : (
-                          <ul className="space-y-1.5">
-                            {currentForbidden.map((m, idx) => (
-                              <li key={idx} className="text-xs text-red-400/90 pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-red-600 font-medium">
-                                {m.move}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-
-                      {/* INJURY TRACKER PANEL */}
-                      <div className="border border-zinc-900 rounded bg-zinc-950/50 p-3 space-y-3">
-                        <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wide block">🩹 SỔ RÁCH CƠ THỂ (INJURY TRACKER)</span>
-                        
-                        {/* List of current injuries */}
-                        {store.injuries.length === 0 ? (
-                          <p className="text-xs text-zinc-600 italic">Chưa ghi nhận chấn thương vật lý nào.</p>
-                        ) : (
-                          <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                            {store.injuries.map((inj) => (
-                              <div key={inj.id} className="bg-[#0c0c0c] border border-zinc-900 rounded p-2 text-[11px] flex items-start justify-between gap-2 shadow-sm">
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-bold text-red-400">📍 {inj.part}</span>
-                                    <span className={`px-1.5 py-0.5 rounded-[3px] text-[9px] font-mono font-bold ${
-                                      inj.pain >= 8 ? 'bg-red-950/50 border border-red-900/40 text-red-500' :
-                                      inj.pain >= 5 ? 'bg-amber-950/50 border border-amber-900/40 text-amber-500' :
-                                      'bg-zinc-900 border border-zinc-800 text-zinc-400'
-                                    }`}>
-                                      Đau: {inj.pain}/10
-                                    </span>
-                                  </div>
-                                  <p className="text-zinc-400"><span className="text-zinc-500 font-medium">Hậu quả:</span> {inj.consequence}</p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => store.removeInjury(inj.id)}
-                                  className="text-zinc-600 hover:text-red-500 transition-colors p-1 cursor-pointer"
-                                  title="Xóa vết thương"
-                                >
-                                  🗑️
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Add new injury form */}
-                        <div className="border-t border-zinc-900 pt-2.5 mt-2 space-y-2">
-                          <span className="text-[9.5px] font-mono font-bold text-zinc-500 uppercase tracking-wider block">Thêm chấn thương mới</span>
-                          <div className="grid grid-cols-3 gap-1.5">
-                            <input 
-                              type="text"
-                              required
-                              placeholder="Bộ phận"
-                              className="col-span-2 bg-zinc-950 border border-zinc-900 rounded p-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 placeholder-zinc-700"
-                              value={newInjuryPart}
-                              onChange={(e) => setNewInjuryPart(e.target.value)}
-                            />
-                            <select
-                              className="bg-zinc-950 border border-zinc-900 rounded p-1.5 text-[11px] text-zinc-300 focus:outline-none focus:border-zinc-800"
-                              value={newInjuryPain}
-                              onChange={(e) => setNewInjuryPain(parseInt(e.target.value))}
-                            >
-                              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                <option key={n} value={n}>Đau: {n}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <input 
-                            type="text"
-                            required
-                            placeholder="Ví dụ: Khập khiễng không thể chạy"
-                            className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 placeholder-zinc-700"
-                            value={newInjuryConsequence}
-                            onChange={(e) => setNewInjuryConsequence(e.target.value)}
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => handleAddInjurySubmit(e)}
-                            className="w-full py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-xs font-bold text-zinc-300 hover:text-white transition-all cursor-pointer text-center"
-                          >
-                            🩹 Thêm Chấn Thương
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 2: KIẾN TRÚC CHIẾN THUẬT "GENIUS BEAT" */}
-                  {expandedSection === "genius" && (
-                    <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-                      <h4 className="text-xs font-bold text-white uppercase font-heading mb-1.5 flex justify-between items-center">
-                        <span>Nước đi thiên tài (Genius Beat)</span>
-                        <span className="text-[9px] font-mono text-zinc-500">6 trường logic</span>
-                      </h4>
-
-                      <div className="space-y-2 text-xs">
-                        <div>
-                          <label className="text-[9px] text-zinc-500 font-mono block mb-0.5">🎯 MỤC TIÊU (GOAL)</label>
-                          <input 
-                            type="text"
-                            placeholder="Ví dụ: Đoạt lấy bình nước khoáng trên bàn"
-                            className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-zinc-300 focus:outline-none focus:border-zinc-800"
-                            value={store.geniusGoal}
-                            onChange={(e) => store.setGeniusGoal(e.target.value)}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[9px] text-zinc-500 font-mono block mb-0.5">🧱 RÀNG BUỘC VẬT LÝ</label>
-                          <input 
-                            type="text"
-                            placeholder="Ví dụ: Vai trái nứt xương, bão cát che khuất"
-                            className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-zinc-300 focus:outline-none focus:border-zinc-800"
-                            value={store.geniusConstraints}
-                            onChange={(e) => store.setGeniusConstraints(e.target.value)}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[9px] text-zinc-500 font-mono block mb-0.5">🎒 CHUẨN BỊ TRƯỚC</label>
-                          <input 
-                            type="text"
-                            placeholder="Ví dụ: Rải bột lưu huỳnh dẫn dụ kiến đỏ"
-                            className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-zinc-300 focus:outline-none focus:border-zinc-800"
-                            value={store.geniusPrep}
-                            onChange={(e) => store.setGeniusPrep(e.target.value)}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[9px] text-zinc-500 font-mono block mb-0.5">⚙️ THAO TÁC VẬT LÝ</label>
-                          <input 
-                            type="text"
-                            placeholder="Ví dụ: Di chuyển 3 bước, kéo chốt dây sắt"
-                            className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-zinc-300 focus:outline-none focus:border-zinc-800"
-                            value={store.geniusOps}
-                            onChange={(e) => store.setGeniusOps(e.target.value)}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[9px] text-zinc-500 font-mono block mb-0.5">🌀 NGHỊCH LÝ BẪY (TRAP PARADOX)</label>
-                          <input 
-                            type="text"
-                            placeholder="Ví dụ: Tạo tiếng động giả ở hốc đá trái"
-                            className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-zinc-300 focus:outline-none focus:border-zinc-800"
-                            value={store.geniusParadox}
-                            onChange={(e) => store.setGeniusParadox(e.target.value)}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[9px] text-zinc-500 font-mono block mb-0.5">⚖️ CÁI GIÁ PHẢI TRẢ</label>
-                          <input 
-                            type="text"
-                            placeholder="Ví dụ: 3 viên đạn, tăng 15% kiệt sức"
-                            className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-zinc-300 focus:outline-none focus:border-zinc-800"
-                            value={store.geniusCost}
-                            onChange={(e) => store.setGeniusCost(e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 3: RADAR TROPHIC WEB 8 TẦNG */}
-                  {expandedSection === "trophic" && (
-                    <div className="space-y-4">
-                      <div>
-                        <h4 className="text-xs font-bold text-white uppercase font-heading mb-2">Radar Trophic Web 8 tầng</h4>
-                        
-                        <div className="space-y-3">
-                          {/* Level Select Slider */}
-                          <div>
-                            <div className="flex justify-between text-xs font-mono mb-1">
-                              <span className="text-zinc-500">Tầng dinh dưỡng</span>
-                              <span className="font-bold text-yellow-500">Tầng {store.trophicLevel}</span>
-                            </div>
-                            <input 
-                              type="range" 
-                              min="1" max="8" 
-                              value={store.trophicLevel}
-                              onChange={(e) => store.setTrophicLevel(parseInt(e.target.value))}
-                              className="w-full accent-yellow-500 h-1 bg-zinc-900 rounded-lg cursor-pointer"
-                            />
-                            <div className="text-[10px] font-mono text-zinc-500 mt-1 font-semibold">
-                              {TROPHIC_WEB[store.trophicLevel]?.name}
-                            </div>
-                          </div>
-
-                          {/* Monster Dropdown */}
-                          <div>
-                            <label className="text-[10px] text-zinc-500 font-mono block mb-1">CHỌN THỰC THỂ KHU VỰC</label>
-                            <select 
-                              className="w-full bg-zinc-950 border border-zinc-900 rounded p-2 text-xs text-white focus:outline-none focus:border-zinc-800 cursor-pointer"
-                              value={store.selectedMonster}
-                              onChange={(e) => store.setSelectedMonster(e.target.value)}
-                            >
-                              {TROPHIC_WEB[store.trophicLevel]?.monsters.map(m => (
-                                <option key={m.name} value={m.name}>{m.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Sensory Cues Box */}
-                      <div className="border border-zinc-900 rounded bg-zinc-950/50 p-3">
-                        <span className="text-[10px] font-mono font-bold text-yellow-500 uppercase tracking-wide block mb-1.5">📡 TÍN HIỆU CẢM QUAN (CUES)</span>
-                        <p className="text-xs text-zinc-400 italic leading-relaxed">
-                          "{store.monsterCues}"
-                        </p>
-                        <span className="text-[9px] font-mono text-zinc-600 block mt-2">
-                          *Ép AI mô tả tín hiệu này trước khi quái vật xuất đầu lộ diện.
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 4: ĐỆT ẤN KÝ VẬT DỤNG (SIGNATURE PROPS) */}
-                  {expandedSection === "props" && (
-                    <div className="space-y-4">
-                      {/* Cổng từ Word-Gate */}
-                      <div>
-                        <h4 className="text-xs font-bold text-white uppercase font-heading mb-2 flex justify-between items-center">
-                          <span>Cổng Từ (Word-Gate)</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              store.setMinWordCount(3910);
-                              store.setMaxWordCount(4590);
-                            }}
-                            className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white font-mono uppercase transition-colors cursor-pointer"
-                            title="Khôi phục chuẩn vàng mặc định 3.910 - 4.590 từ"
-                          >
-                            Mặc định
-                          </button>
-                        </h4>
-                        
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[9px] text-zinc-500 font-mono block mb-1">TỪ TỐI THIỂU (MIN)</label>
-                            <input
-                              type="number"
-                              className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 font-mono"
-                              value={store.minWordCount}
-                              onChange={(e) => store.setMinWordCount(parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] text-zinc-500 font-mono block mb-1">TỪ TỐI ĐA (MAX)</label>
-                            <input
-                              type="number"
-                              className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 font-mono"
-                              value={store.maxWordCount}
-                              onChange={(e) => store.setMaxWordCount(parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                        </div>
-                        <span className="text-[9px] font-mono text-zinc-650 block mt-1.5">
-                          * Chuẩn vàng mặc định: 3.910 - 4.590 từ.
-                        </span>
-                      </div>
-
-                      <hr className="border-zinc-900/60" />
-
-                      {/* Đột Phá Ấn Ký Chữ Ký */}
-                      <div>
-                        <h4 className="text-xs font-bold text-white uppercase font-heading mb-2">Đột Phá Ấn Ký Chữ Ký</h4>
-                        
-                        <div>
-                          <label className="text-[10px] text-zinc-500 font-mono block mb-1">VẬT DỤNG CHỮ KÝ (PHÂN TÁCH BẰNG DẤU PHẨY)</label>
-                          <textarea
-                            className="w-full h-16 p-2 bg-zinc-950 border border-zinc-900 rounded text-xs text-zinc-300 focus:outline-none focus:border-zinc-800 placeholder-zinc-700"
-                            value={store.signatureProps}
-                            onChange={(e) => store.setSignatureProps(e.target.value)}
-                            placeholder="Ví dụ: Bật lửa đồng, Bình nước vỏ sắt, Kính một tròng nứt"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Realtime Detection Badges */}
-                      <div className="border border-zinc-900 rounded bg-zinc-950/50 p-3 space-y-2">
-                        <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wide block">TRẠNG THÁI QUÉT ẤN KÝ CHƯƠNG</span>
-                        
-                        <div className="flex flex-wrap gap-1.5">
-                          {parsedProps.length === 0 ? (
-                            <span className="text-xs text-zinc-600 italic">Chưa khai báo vật dụng chữ ký.</span>
-                          ) : (
-                            parsedProps.map((p, idx) => {
-                              const detected = store.detectedProps.includes(p);
-                              return (
-                                <span 
-                                  key={idx} 
-                                  className={`text-[10px] px-2 py-0.5 rounded font-medium border font-mono transition-all ${
-                                    detected 
-                                      ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400' 
-                                      : 'bg-zinc-900/50 border-zinc-850 text-zinc-600'
-                                  }`}
-                                >
-                                  {detected ? '✓' : '✗'} {p}
-                                </span>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                </div>
-              </div>
-
-              {/* Tóm tắt Cấu hình Read-Only */}
-              <div className="bg-zinc-950 border border-zinc-900 p-3 rounded-lg text-xs font-mono space-y-1.5">
-                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest border-b border-zinc-900 pb-1 mb-1">Cấu hình nền</div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Chủ đề:</span>
-                  <span className="text-white font-semibold">{store.theme}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Phong cách:</span>
-                  <span className="text-white font-semibold">{store.style}</span>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Cụm nút hành động phía dưới Sidebar */}
-            <div className="pt-4 border-t border-zinc-900 flex gap-3 mt-6">
-              <button 
-                onClick={handleConfirmReset}
-                disabled={store.isGeneratingOutline || store.isWritingChapter}
-                className="px-3.5 py-2.5 text-xs font-bold rounded bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 transition-colors disabled:opacity-40 cursor-pointer text-zinc-400 hover:text-white"
-              >
-                LÀM MỚI
-              </button>
-              
-              <button 
-                onClick={handleWriteChapter}
-                disabled={store.isGeneratingOutline || store.isWritingChapter || !store.outlineGenerated}
-                className="flex-1 py-2.5 text-xs font-bold rounded bg-orange-600 hover:bg-orange-500 text-white transition-colors disabled:opacity-40 tracking-wider cursor-pointer text-center uppercase"
-              >
-                {store.isWritingChapter ? "Đang viết..." : "Sinh Phần Kế Tiếp"}
-              </button>
-            </div>
-
-          </aside>
-
-          {/* CỘT PHẢI: KHÔNG GIAN HIỂN THỊ NỘI DUNG VÀ METER CON DẤU STAMP (70% WIDTH) */}
-          <section className="flex-1 flex flex-col bg-[#070707] lg:h-full lg:overflow-hidden relative">
-            
-            {/* Header Content Toolbar */}
-            <div className="h-14 border-b border-zinc-900 px-6 flex items-center justify-between select-none shrink-0 bg-[#0a0a0a]">
-              <div className="flex gap-4">
-                <button
-                  onClick={() => handleSwitchTab('outline')}
-                  className={`text-xs font-bold pb-4 pt-4 border-b-2 transition-all cursor-pointer uppercase tracking-wider ${
-                    store.activeTab === 'outline' ? 'border-orange-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
-                  Dàn ý kịch bản
-                </button>
-                <button
-                  onClick={() => handleSwitchTab('chapters')}
-                  disabled={!store.outlineGenerated}
-                  className={`text-xs font-bold pb-4 pt-4 border-b-2 transition-all cursor-pointer uppercase tracking-wider ${
-                    store.activeTab === 'chapters' ? 'border-orange-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-350'
-                  }`}
-                >
-                  Chi tiết tác phẩm
-                </button>
-              </div>
-
-              {/* MÉT CON DẤU WORD-GATE & STAMP-WEAVING */}
-              <div className="hidden md:flex items-center gap-3.5">
-                
-                {/* Word counter progress */}
-                <div className="text-right">
-                  <div className="text-[10px] text-zinc-500 font-mono uppercase">Số từ:</div>
-                  <div className="text-xs font-mono font-bold text-white">
-                    {store.wordCount.toLocaleString()} / <span className="text-[10px] text-zinc-500">{store.minWordCount.toLocaleString('vi-VN')}-{store.maxWordCount.toLocaleString('vi-VN')}</span>
-                  </div>
-                </div>
-
-                {/* Word Gate Stamp */}
-                <span 
-                  className={`text-[10px] px-2.5 py-1 rounded font-bold border transition-all font-mono tracking-wider ${
-                    store.wordGatePassed 
-                      ? 'bg-amber-950/20 border-amber-500 text-amber-500 shadow shadow-amber-950/10 scale-105' 
-                      : 'bg-zinc-950 border-zinc-900 text-zinc-700'
-                  }`}
-                >
-                  👑 WORD-GATE
-                </span>
-
-                {/* Stamp Weaving Stamp */}
-                <span 
-                  className={`text-[10px] px-2.5 py-1 rounded font-bold border transition-all font-mono tracking-wider ${
-                    store.stampWeavingPassed 
-                      ? 'bg-emerald-950/20 border-emerald-500 text-emerald-500 shadow shadow-emerald-950/10 scale-105' 
-                      : 'bg-zinc-950 border-zinc-900 text-zinc-700'
-                  }`}
-                >
-                  🛡️ STAMP-WEAVING
-                </span>
-              </div>
-              
-              <button 
-                onClick={handleExportFullNovel}
-                disabled={store.isGeneratingOutline || store.isWritingChapter || !store.outlineGenerated}
-                className="text-xs px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 font-bold transition-all cursor-pointer text-zinc-400 hover:text-white"
-              >
-                Tải về (.txt)
-              </button>
-            </div>
-
-            {/* Khung đếm từ thu nhỏ khi màn hình nhỏ */}
-            <div className="md:hidden flex items-center justify-between px-6 py-2 border-b border-zinc-900 bg-zinc-950/30 text-xs font-mono">
-              <span className="text-zinc-500">Đếm từ: <strong className="text-white">{store.wordCount}</strong></span>
               <div className="flex gap-2">
-                <span className={`px-1.5 py-0.5 rounded font-bold ${store.wordGatePassed ? 'text-amber-500 bg-amber-950/10' : 'text-zinc-600'}`}>👑</span>
-                <span className={`px-1.5 py-0.5 rounded font-bold ${store.stampWeavingPassed ? 'text-emerald-500 bg-emerald-950/10' : 'text-zinc-600'}`}>🛡️</span>
+                {/* Sinh mới nhánh hiện tại button */}
+                <button
+                  onClick={() => store.generateOutlineBranch(store.activeOutlineBranch)}
+                  disabled={store.isGeneratingOutline}
+                  className="px-4 py-2 rounded bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-xs font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  ⚡ Sinh Mới Nhánh {store.activeOutlineBranch + 1}
+                </button>
+
+                {store.selectedBranchGenerated[store.activeOutlineBranch] && (
+                  <>
+                    <button
+                      onClick={handleCopyToClipboard}
+                      className="px-3 py-2 rounded bg-zinc-950 border border-zinc-900 text-xs text-zinc-400 hover:text-white cursor-pointer"
+                      title="Copy to Clipboard"
+                    >
+                      📋 Copy
+                    </button>
+                    <button 
+                      onClick={() => store.confirmOutline()}
+                      className="px-5 py-2 rounded bg-emerald-600 hover:bg-emerald-500 font-extrabold text-xs text-white uppercase tracking-wider cursor-pointer shadow shadow-emerald-950/20"
+                    >
+                      🔒 CHỐT DÀN Ý & BƯỚC TIẾP THEO
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Inner Card / Editor Workspace */}
-            <div className="flex-1 p-6 md:p-8 overflow-y-auto selection:bg-orange-500/20 relative" ref={renderedTextRef}>
+            {/* Main side-by-side Live Preview Editor */}
+            <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
               
-              {/* Pagination bar for Chapter view */}
-              {store.activeTab === 'chapters' && store.outlineGenerated && (
-                <div className="max-w-3xl mx-auto mb-6 flex items-center justify-between bg-zinc-950/80 border border-zinc-900 p-2 rounded-lg backdrop-blur shrink-0 select-none">
-                  <button 
-                    className="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-850 text-xs font-bold disabled:opacity-30 cursor-pointer text-zinc-400 hover:text-white"
-                    disabled={store.activeChapterIndex === 0 || store.isWritingChapter}
-                    onClick={() => handleNavigateChapter(-1)}
-                  >
-                    ◀ Tập Trước
-                  </button>
-                  <span className="text-xs font-mono font-bold text-white">
-                    TẬP KỊCH BẢN: {store.activeChapterIndex + 1} / {store.chapters.length}
+              {/* Left pane: Plaintext outline editor */}
+              <div className="w-full md:w-1/2 border-r border-zinc-900 bg-[#070707] flex flex-col">
+                <div className="h-10 px-4 border-b border-zinc-900 bg-zinc-950/40 flex items-center shrink-0">
+                  <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider">📝 TRÌNH SOẠN THẢO DÀN Ý CHƯƠNG CHI TIẾT</span>
+                </div>
+                
+                {store.selectedBranchGenerated[store.activeOutlineBranch] ? (
+                  <textarea
+                    className="flex-1 p-6 bg-zinc-950/20 text-zinc-300 text-xs font-mono leading-relaxed focus:outline-none resize-none overflow-y-auto placeholder-zinc-800"
+                    value={store.outlineBranches[store.activeOutlineBranch]}
+                    onChange={(e) => store.updateOutlineBranchText(e.target.value)}
+                    placeholder="Viết hoặc hiệu chỉnh dàn ý tổng thể tại đây..."
+                  />
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-4">
+                    <span className="text-4xl text-zinc-700 animate-pulse">⚡</span>
+                    <h3 className="text-sm font-bold text-zinc-500">Nhánh {store.activeOutlineBranch + 1} Chưa Khởi Tạo</h3>
+                    <p className="text-xs text-zinc-600 max-w-xs mx-auto">AI sẽ tự động lập cấu trúc 3 hồi, phân bổ số tập và plot hooks dựa trên ý tưởng core.</p>
+                    <button
+                      onClick={() => store.generateOutlineBranch(store.activeOutlineBranch)}
+                      className="px-5 py-2.5 rounded bg-orange-600 hover:bg-orange-500 font-extrabold text-xs text-white uppercase tracking-wider transition-all cursor-pointer shadow shadow-orange-950/20"
+                    >
+                      🚀 Khởi Tạo Dàn Ý Nhánh {store.activeOutlineBranch + 1}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Right pane: Beautiful Markdown preview */}
+              <div className="w-full md:w-1/2 bg-[#050505] flex flex-col overflow-hidden">
+                <div className="h-10 px-4 border-b border-zinc-900 bg-zinc-950/40 flex items-center shrink-0">
+                  <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider">👁️ BẢN PREVIEW ĐỊNH DẠNG HOÀN THIỆN</span>
+                </div>
+                
+                <div className="flex-1 p-6 md:p-8 overflow-y-auto">
+                  {store.isGeneratingOutline && store.activeOutlineBranch === store.activeOutlineBranch ? (
+                    <div className="space-y-4">
+                      <MarkdownBody text={store.displayedText} isStreaming={true} />
+                    </div>
+                  ) : store.selectedBranchGenerated[store.activeOutlineBranch] ? (
+                    <div className="markdown-block bg-[#080808]/20 border border-zinc-900/30 p-6 rounded-lg leading-relaxed select-text">
+                      <MarkdownBody text={store.outlineBranches[store.activeOutlineBranch]} isStreaming={false} />
+                    </div>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-zinc-650 text-xs italic">
+                      Đang đợi sinh kịch bản dàn ý...
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ==================== BƯỚC 3: HỒ SƠ NHÂN VẬT (GATE 2) ==================== */}
+        {store.pipelineStep === 3 && (
+          <div className="flex-1 overflow-y-auto px-6 py-8 select-text">
+            <div className="max-w-6xl mx-auto space-y-6">
+              
+              <header className="flex flex-col md:flex-row md:items-center justify-between border-b border-zinc-900 pb-5 gap-4">
+                <div>
+                  <span className="inline-block text-[10px] font-mono font-bold text-orange-500 bg-orange-950/30 border border-orange-900/30 px-2 py-0.5 rounded mb-2">
+                    GATE 2: CHARACTER EXTRACTION
                   </span>
-                  <button 
-                    className="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-850 text-xs font-bold disabled:opacity-30 cursor-pointer text-zinc-400 hover:text-white"
-                    disabled={store.activeChapterIndex === store.chapters.length - 1 || store.isWritingChapter}
-                    onClick={() => handleNavigateChapter(1)}
-                  >
-                    Tập Tiếp ▶
-                  </button>
+                  <h2 className="text-2xl font-black text-white uppercase tracking-tight font-heading">
+                    HỒ SƠ NHÂN VẬT TĨNH
+                  </h2>
+                  <p className="text-zinc-500 text-xs mt-1 leading-relaxed max-w-2xl">
+                    Đảm bảo tuyệt đối tính nhất quán trong cốt truyện. AI sẽ tự động phân tích dàn ý để bóc tách thông tin nhân vật chính phụ. Bạn có quyền hiệu chỉnh, xóa hoặc thêm mới.
+                  </p>
+                </div>
+                
+                <div>
+                  {store.isExtractingCharacters ? (
+                    <span className="text-xs text-amber-500 animate-pulse font-mono font-bold bg-amber-950/20 border border-amber-900/30 px-3 py-1.5 rounded inline-block">
+                      ⚙️ AI đang quét trích xuất nhân vật...
+                    </span>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => store.extractCharacters()}
+                        className="px-4 py-2 text-xs font-bold rounded bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-450 hover:text-white transition-colors cursor-pointer"
+                      >
+                        🔄 Quét Lại Dàn Ý
+                      </button>
+                      <button
+                        onClick={() => store.confirmCharacters()}
+                        className="px-5 py-2.5 rounded bg-emerald-600 hover:bg-emerald-500 font-extrabold text-xs text-white uppercase tracking-wider cursor-pointer shadow shadow-emerald-950/20"
+                      >
+                        🔒 CHỐT NHÂN VẬT & TIẾP TỤC
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </header>
+
+              {/* Streaming progress if extracting */}
+              {store.isExtractingCharacters && (
+                <div className="bg-[#0b0b0b] border border-zinc-900 rounded-lg p-6 max-h-72 overflow-y-auto">
+                  <MarkdownBody text={store.displayedText} isStreaming={true} />
                 </div>
               )}
 
-              {/* Render chính */}
-              <div className="max-w-3xl mx-auto space-y-4">
-                
-                {/* 1. Màn hình chờ rỗng chưa có dàn ý */}
-                {!store.outlineGenerated && !store.isGeneratingOutline && (
-                  <div className="h-96 flex flex-col items-center justify-center text-zinc-600 select-none text-center space-y-4">
-                    <div className="w-16 h-16 rounded-full bg-zinc-950 border border-zinc-900 flex items-center justify-center text-3xl">
-                      ☢️
+              {/* Character editable grid */}
+              {!store.isExtractingCharacters && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {store.danh_sach_nhan_vat.map((nv, idx) => (
+                    <div key={idx} className="bg-[#0c0c0c] border border-zinc-900 rounded-xl p-5 relative group space-y-4 hover:border-zinc-800 transition-all shadow-md">
+                      <button
+                        onClick={() => store.removeNhanVat(nv.ten)}
+                        className="absolute top-4 right-4 text-zinc-650 hover:text-red-500 transition-colors cursor-pointer"
+                        title="Xóa nhân vật"
+                      >
+                        🗑️
+                      </button>
+
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-orange-650 flex items-center justify-center font-bold text-white text-xs font-mono">
+                          {idx + 1}
+                        </div>
+                        <input
+                          type="text"
+                          className="bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1 text-sm font-black text-white focus:outline-none focus:border-zinc-850"
+                          value={nv.ten}
+                          onChange={(e) => store.updateNhanVat(idx, { ten: e.target.value })}
+                          placeholder="Tên nhân vật"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2.5 text-xs">
+                        <div>
+                          <label className="text-[9px] text-zinc-550 font-mono block mb-0.5">ĐẶC ĐIỂM & GIỚI HẠN THỂ CHẤT / KHUYẾT TẬT</label>
+                          <textarea
+                            className="w-full bg-zinc-950 border border-zinc-900 rounded p-2 text-zinc-300 focus:outline-none focus:border-zinc-850 h-14 resize-none"
+                            value={nv.dac_diem}
+                            onChange={(e) => store.updateNhanVat(idx, { dac_diem: e.target.value })}
+                            placeholder="Mô tả khuyết tật cơ thể và ngoại hình..."
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] text-zinc-550 font-mono block mb-0.5">MỤC TIÊU SỐNG CÒN</label>
+                            <input
+                              type="text"
+                              className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-zinc-300 focus:outline-none focus:border-zinc-850"
+                              value={nv.muc_tieu}
+                              onChange={(e) => store.updateNhanVat(idx, { muc_tieu: e.target.value })}
+                              placeholder="Mục tiêu..."
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-zinc-550 font-mono block mb-0.5">NỖI SỢ LỚN NHẤT</label>
+                            <input
+                              type="text"
+                              className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-zinc-300 focus:outline-none focus:border-zinc-850"
+                              value={nv.noi_so}
+                              onChange={(e) => store.updateNhanVat(idx, { noi_so: e.target.value })}
+                              placeholder="Nỗi sợ..."
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] text-zinc-550 font-mono block mb-0.5">VẬT DỤNG KÝ NHÂN ĐẶC TRƯNG</label>
+                          <input
+                            type="text"
+                            className="w-full bg-zinc-950 border border-zinc-900 rounded p-1.5 text-zinc-300 focus:outline-none focus:border-zinc-850"
+                            value={nv.vat_dung_ky_nhan}
+                            onChange={(e) => store.updateNhanVat(idx, { vat_dung_ky_nhan: e.target.value })}
+                            placeholder="Chiếc bật lửa cũ, bình nước sắt..."
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-zinc-400">Không gian biên kịch trống</p>
-                      <p className="text-xs text-zinc-500 max-w-sm mt-1">Vui lòng quay lại màn hình Setup hoặc nhấn nút "Khởi tạo Dàn ý kịch bản chính thức" để bắt đầu viết truyện bằng trí tuệ nhân tạo.</p>
+                  ))}
+
+                  {/* Add manual character form */}
+                  <form onSubmit={handleAddCharacter} className="bg-zinc-950 border border-dashed border-zinc-800 hover:border-zinc-750 transition-colors rounded-xl p-5 flex flex-col justify-between space-y-4">
+                    <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">➕ Thêm nhân vật mới</span>
+                    
+                    <div className="space-y-2 text-xs flex-1">
+                      <input
+                        type="text"
+                        required
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-white focus:outline-none focus:border-zinc-700"
+                        value={newCharName}
+                        onChange={(e) => setNewCharName(e.target.value)}
+                        placeholder="Tên nhân vật Hán Việt mới (ví dụ: Thạch Dã)"
+                      />
+                      <textarea
+                        required
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-zinc-300 focus:outline-none focus:border-zinc-700 h-14 resize-none"
+                        value={newCharTraits}
+                        onChange={(e) => setNewCharTraits(e.target.value)}
+                        placeholder="Đặc điểm & khuyết tật vật lý (ví dụ: mù mắt trái)..."
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded p-1.5 text-zinc-300 focus:outline-none"
+                          value={newCharGoal}
+                          onChange={(e) => setNewCharGoal(e.target.value)}
+                          placeholder="Mục tiêu sinh tồn..."
+                        />
+                        <input
+                          type="text"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded p-1.5 text-zinc-300 focus:outline-none"
+                          value={newCharFear}
+                          onChange={(e) => setNewCharFear(e.target.value)}
+                          placeholder="Nỗi sợ mạt thế..."
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-zinc-300 focus:outline-none"
+                        value={newCharItem}
+                        onChange={(e) => setNewCharItem(e.target.value)}
+                        placeholder="Vật dụng ký nhân đặc trưng mang theo..."
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 rounded bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-xs font-bold text-white tracking-wider transition-colors cursor-pointer text-center uppercase"
+                    >
+                      Thêm Vào Danh Sách
+                    </button>
+                  </form>
+
+                </div>
+              )}
+
+              {/* Warnings and continuity rules */}
+              <div className="bg-[#0b0b0b] border border-zinc-900/60 p-4 rounded-lg space-y-1.5 text-[11px] text-zinc-550 leading-relaxed font-mono">
+                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest block mb-1">⚠️ QUY TẮC BẢO TOÀN TÍNH LIÊN TỤC (CONTINUITY SYSTEM)</span>
+                <p>1. Các nhân vật đã chốt ở bước này sẽ được nạp trực tiếp làm **Static Context** (Bối cảnh tĩnh) cho API Kịch bản.</p>
+                <p>2. AI sẽ bị cấm tiệt việc tự sáng tác ra thêm nhân vật lạ hoặc thay đổi khuyết tật cơ thể của những nhân vật này trong suốt các chương sau.</p>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ==================== BƯỚC 4: KỊCH BẢN PHÂN CẢNH (SPLIT-VIEW WORKSPACE) ==================== */}
+        {store.pipelineStep === 4 && (
+          <div className="flex-1 overflow-hidden flex flex-col lg:flex-row select-text">
+            
+            {/* LEFT COLUMN: STATIC REFERENCE PANEL (40% WIDTH) */}
+            <aside className="w-full lg:w-[480px] border-r border-zinc-900 bg-[#0a0a0a] flex flex-col overflow-hidden shrink-0 select-none">
+              
+              {/* Reference Tabs Navigation */}
+              <div className="h-12 border-b border-zinc-900 bg-zinc-950 flex items-center justify-around shrink-0 px-2">
+                {[
+                  { id: "outline", label: "🗺️ DÀN Ý TỔNG" },
+                  { id: "characters", label: "👥 NHÂN VẬT CHỐT" },
+                  { id: "scratchpad", label: "📝 GHI CHÚ VIẾT TAY" }
+                ].map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setLeftTab(t.id)}
+                    className={`text-[10px] font-bold py-3 px-3.5 border-b-2 transition-all cursor-pointer font-mono tracking-wider ${
+                      leftTab === t.id ? "border-orange-500 text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Reference Tab Content */}
+              <div className="flex-1 p-5 overflow-y-auto select-text">
+
+                {/* Tab Outline: Displays lock dan y and chapters structure */}
+                {leftTab === "outline" && (
+                  <div className="space-y-5">
+                    <div className="border border-zinc-900 rounded bg-zinc-950/40 p-4 space-y-3">
+                      <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest block border-b border-zinc-900 pb-1">Cấu trúc 3 hồi tổng quát</span>
+                      <div className="space-y-2 text-xs leading-relaxed text-zinc-400">
+                        <div><strong className="text-zinc-300 font-semibold font-sans">1. Mở đầu:</strong> {store.dan_y_tong_the.mo_dau || "Chưa rõ"}</div>
+                        <div><strong className="text-zinc-300 font-semibold font-sans">2. Cao trào:</strong> {store.dan_y_tong_the.cao_trao || "Chưa rõ"}</div>
+                        <div><strong className="text-zinc-300 font-semibold font-sans">3. Kết thúc:</strong> {store.dan_y_tong_the.ket_thuc || "Chưa rõ"}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest block px-1">Danh mục chương chi tiết</span>
+                      
+                      <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                        {store.danh_muc_chuong.map((ch, idx) => {
+                          const isActive = store.activeChapterIndex === idx;
+                          return (
+                            <div 
+                              key={ch.so_chuong}
+                              onClick={() => !store.isWritingChapter && store.selectChapter(idx)}
+                              className={`border p-3 rounded-lg transition-all cursor-pointer ${
+                                isActive 
+                                  ? "bg-orange-950/15 border-orange-600 shadow shadow-orange-950/15 scale-[1.01]" 
+                                  : ch.da_viet
+                                  ? "bg-emerald-950/5 border-emerald-900/30 hover:border-emerald-800 text-zinc-400"
+                                  : "bg-zinc-950 border-zinc-900 hover:border-zinc-800 text-zinc-500"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1 text-[11px] font-mono font-bold">
+                                <span>Chương {ch.so_chuong}</span>
+                                <span className={ch.da_viet ? "text-emerald-500" : "text-zinc-650"}>
+                                  {ch.da_viet ? "ĐÃ HOÀN THÀNH" : "CHƯA VIẾT"}
+                                </span>
+                              </div>
+                              <h4 className="font-bold text-xs text-white mb-1.5">{ch.tieu_de}</h4>
+                              <p className="text-[10.5px] text-zinc-500 leading-relaxed font-sans font-medium line-clamp-2">{ch.tom_tat_su_kien}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* 2. Stream Dàn Ý */}
-                {store.activeTab === 'outline' && (store.outlineGenerated || store.isGeneratingOutline) && (
-                  <div className="markdown-block bg-[#090909]/40 border border-zinc-900/30 p-6 md:p-8 rounded-xl">
-                    <MarkdownBody 
-                      text={store.isGeneratingOutline ? store.displayedText : store.outlineText} 
-                      isStreaming={store.isGeneratingOutline} 
-                    />
-                  </div>
-                )}
+                {/* Tab Characters: Read-only display of locked character DB */}
+                {leftTab === "characters" && (
+                  <div className="space-y-4">
+                    {store.danh_sach_nhan_vat.map((nv, idx) => (
+                      <div key={idx} className="bg-zinc-950 border border-zinc-900 rounded-lg p-4 space-y-2 text-xs">
+                        <div className="flex items-center gap-2 border-b border-zinc-900 pb-1.5 mb-1.5">
+                          <span className="w-5 h-5 rounded-full bg-orange-600/10 border border-orange-500/25 flex items-center justify-center font-mono font-bold text-[10px] text-orange-400">
+                            {idx + 1}
+                          </span>
+                          <h4 className="font-black text-white text-sm">{nv.ten}</h4>
+                        </div>
+                        <div className="space-y-1.5 leading-relaxed text-zinc-400 font-sans">
+                          <p><strong className="text-zinc-550 font-mono text-[9px] block">ĐẶC ĐIỂM & GIỚI HẠN THỂ CHẤT</strong> {nv.dac_diem}</p>
+                          <p><strong className="text-zinc-550 font-mono text-[9px] block">MỤC TIÊU SỐNG CÒN</strong> {nv.muc_tieu}</p>
+                          <p><strong className="text-zinc-550 font-mono text-[9px] block">NỖI SỢ LỚN NHẤT</strong> {nv.noi_so}</p>
+                          <p><strong className="text-zinc-550 font-mono text-[9px] block">VẬT DỤNG CHỮ KÝ</strong> {nv.vat_dung_ky_nhan}</p>
+                        </div>
+                      </div>
+                    ))}
 
-                {/* 3. Stream Chương */}
-                {store.activeTab === 'chapters' && store.outlineGenerated && (
-                  <div className="markdown-block bg-[#090909]/40 border border-zinc-900/30 p-6 md:p-8 rounded-xl">
-                    {store.isWritingChapter ? (
-                      <MarkdownBody text={store.displayedText} isStreaming={true} />
-                    ) : activeChapter?.written ? (
-                      <div>
-                        <h2 className="text-xl md:text-2xl font-extrabold text-white mb-6 uppercase border-b border-zinc-900 pb-3 font-heading">
-                          Chương {activeChapter.number}: {activeChapter.title.split(': ')[1] || activeChapter.title}
-                        </h2>
-                        <MarkdownBody text={activeChapter.content} isStreaming={false} />
-                      </div>
-                    ) : (
-                      <div className="text-center py-16 space-y-4">
-                        <div className="text-4xl">✍️</div>
-                        <h3 className="font-bold text-sm text-zinc-400">Chương này chưa có nội dung kịch bản</h3>
-                        <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                          Vui lòng thiết lập chỉ số sinh lực, Trophic Web và kịch bản chiến thuật Genius Beat ở Sidebar trái, sau đó nhấn nút "Sinh Phần Kế Tiếp" để bắt đầu.
-                        </p>
-                        <button
-                          onClick={handleWriteChapter}
-                          className="px-4 py-2 text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white rounded transition-colors shadow cursor-pointer uppercase"
-                        >
-                          🚀 Bắt đầu viết tập {activeChapter?.number}
-                        </button>
-                      </div>
+                    {store.danh_sach_nhan_vat.length === 0 && (
+                      <p className="text-center text-zinc-650 text-xs italic py-8">Chưa ghi nhận danh sách nhân vật chốt nào.</p>
                     )}
                   </div>
                 )}
 
+                {/* Tab Scratchpad: Free writer notes */}
+                {leftTab === "scratchpad" && (
+                  <div className="space-y-3 flex flex-col h-full">
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest block mb-1">💡 GHI CHÚ VIẾT TAY (SCRATCHPAD)</span>
+                      <p className="text-zinc-550 text-[10px] leading-relaxed">
+                        Nhập ghi chú định hướng, các chi tiết đắt giá hoặc plot points cụ thể cho chương hiện tại. AI sẽ nạp trực tiếp vào Prompt viết kịch bản chi tiết để triển khai chính xác ý đồ của bạn.
+                      </p>
+                    </div>
+                    <textarea
+                      className="flex-1 min-h-[300px] w-full p-4 bg-zinc-950 border border-zinc-900 focus:border-zinc-800 rounded-lg text-xs leading-relaxed text-zinc-300 font-mono placeholder-zinc-800 focus:outline-none resize-none"
+                      value={store.scratchpad}
+                      onChange={(e) => store.setScratchpad(e.target.value)}
+                      placeholder="Nhập ghi chú viết tay cho tập này... (ví dụ: Tiêu Hàn dùng bình nước kim loại cũ gõ vào thành turbine tạo âm thanh vang nhại dụ drone bay lệch hướng, sau đó khập khiễng rách gân lê chân chạy sang hốc đá bên cạnh)..."
+                    />
+                  </div>
+                )}
+
               </div>
-            </div>
 
-          </section>
-        </div>
-      </main>
+              {/* Sidebar Footer reset and global action */}
+              <div className="h-16 px-5 border-t border-zinc-900 bg-zinc-950 flex items-center justify-between shrink-0 select-none">
+                <button
+                  onClick={handleConfirmReset}
+                  className="px-3.5 py-2 text-xs font-bold rounded bg-zinc-900 border border-zinc-850 hover:bg-zinc-800 text-zinc-450 hover:text-white transition-colors cursor-pointer"
+                >
+                  RESET APP
+                </button>
 
-      {/* ==================== SETTINGS MODAL (CẤU HÌNH API KEYS VÀ XOAY VÒNG) ==================== */}
+                <button
+                  onClick={handleExportFullNovel}
+                  disabled={store.isWritingChapter}
+                  className="px-4 py-2 text-xs font-extrabold rounded bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-orange-400 hover:text-orange-300 transition-colors disabled:opacity-40 cursor-pointer text-center uppercase"
+                >
+                  Xuất Kịch Bản
+                </button>
+              </div>
+
+            </aside>
+
+            {/* RIGHT COLUMN: CREATIVE SCRIPTWRITER PANE (60% WIDTH) */}
+            <section className="flex-1 flex flex-col bg-[#050505] overflow-hidden relative select-text">
+              
+              {/* Header Content Toolbar */}
+              <div className="h-14 border-b border-zinc-900 px-6 flex items-center justify-between shrink-0 bg-[#0a0a0a] select-none">
+                {activeChapter ? (
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-orange-600/10 border border-orange-500/25 text-orange-400">
+                      TẬP {activeChapter.so_chuong}
+                    </span>
+                    <h3 className="font-extrabold text-xs text-white line-clamp-1">{activeChapter.tieu_de}</h3>
+                  </div>
+                ) : (
+                  <div></div>
+                )}
+
+                {/* WORD-GATE & STAMP-WEAVING REALTIME HUD */}
+                <div className="hidden md:flex items-center gap-4 text-right">
+                  <div>
+                    <span className="text-[10px] text-zinc-550 font-mono block">ĐẾM TỪ</span>
+                    <span className="text-xs font-mono font-bold text-white">
+                      {store.wordCount.toLocaleString()} / <span className="text-[10px] text-zinc-500">{store.minWordCount.toLocaleString()}-{store.maxWordCount.toLocaleString()}</span>
+                    </span>
+                  </div>
+
+                  <span 
+                    className={`text-[10px] px-2.5 py-1 rounded font-bold border transition-all font-mono tracking-wider ${
+                      store.wordGatePassed 
+                        ? 'bg-amber-950/20 border-amber-500 text-amber-500 shadow shadow-amber-950/10 scale-105' 
+                        : 'bg-zinc-950 border-zinc-900 text-zinc-700'
+                    }`}
+                  >
+                    👑 WORD-GATE
+                  </span>
+
+                  <span 
+                    className={`text-[10px] px-2.5 py-1 rounded font-bold border transition-all font-mono tracking-wider ${
+                      store.stampWeavingPassed 
+                        ? 'bg-emerald-950/20 border-emerald-500 text-emerald-500 shadow shadow-emerald-950/10 scale-105' 
+                        : 'bg-zinc-950 border-zinc-900 text-zinc-700'
+                    }`}
+                  >
+                    🛡️ STAMP-WEAVING
+                  </span>
+                </div>
+              </div>
+
+              {/* Real-time word checks on mobile */}
+              <div className="md:hidden flex items-center justify-between px-6 py-2 border-b border-zinc-900 bg-zinc-950/40 text-xs font-mono">
+                <span className="text-zinc-500">Số từ: <strong className="text-white">{store.wordCount}</strong></span>
+                <div className="flex gap-2">
+                  <span className={`px-1.5 py-0.5 rounded font-bold ${store.wordGatePassed ? 'text-amber-500 bg-amber-950/10' : 'text-zinc-700'}`}>👑 WORD</span>
+                  <span className={`px-1.5 py-0.5 rounded font-bold ${store.stampWeavingPassed ? 'text-emerald-500 bg-emerald-950/10' : 'text-zinc-700'}`}>🛡️ WEAVE</span>
+                </div>
+              </div>
+
+              {/* Active Chapter Pagination & Control Bar */}
+              <div className="h-12 border-b border-zinc-900 bg-zinc-950 px-6 flex items-center justify-between shrink-0 select-none">
+                <div className="flex items-center gap-1.5">
+                  <button 
+                    className="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-850 text-[10px] font-mono font-bold disabled:opacity-30 cursor-pointer text-zinc-400 hover:text-white"
+                    disabled={store.activeChapterIndex === 0 || store.isWritingChapter}
+                    onClick={() => store.navigateChapter(-1)}
+                  >
+                    ◀ TRƯỚC
+                  </button>
+                  <button 
+                    className="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-850 text-[10px] font-mono font-bold disabled:opacity-30 cursor-pointer text-zinc-400 hover:text-white"
+                    disabled={store.activeChapterIndex === store.danh_muc_chuong.length - 1 || store.isWritingChapter}
+                    onClick={() => store.navigateChapter(1)}
+                  >
+                    TIẾP ▶
+                  </button>
+                </div>
+
+                <div className="flex gap-2">
+                  {activeChapter && activeChapter.da_viet && !store.isWritingChapter && (
+                    <>
+                      <button
+                        onClick={handleCopyToClipboard}
+                        className="px-3 py-1 rounded bg-zinc-900 border border-zinc-850 hover:bg-zinc-800 text-[10.5px] font-bold text-zinc-450 hover:text-white cursor-pointer transition-colors"
+                      >
+                        📋 Copy
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (isEditingScript) {
+                            handleSaveEditedScript();
+                          } else {
+                            setIsEditingScript(true);
+                          }
+                        }}
+                        className={`px-3 py-1 rounded border text-[10.5px] font-bold cursor-pointer transition-all ${
+                          isEditingScript 
+                            ? 'bg-emerald-600 border-emerald-500 text-white font-extrabold shadow' 
+                            : 'bg-zinc-900 border-zinc-850 text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        {isEditingScript ? "✓ LƯU" : "✏️ SỬA"}
+                      </button>
+                      {isEditingScript && (
+                        <button
+                          onClick={() => setIsEditingScript(false)}
+                          className="px-2 py-1 rounded bg-zinc-900 border border-zinc-850 text-[10.5px] text-zinc-500 hover:text-white cursor-pointer"
+                        >
+                          HỦY
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  <button
+                    onClick={handleWriteChapter}
+                    disabled={store.isWritingChapter || store.isGeneratingOutline}
+                    className="px-4 py-1.5 rounded bg-orange-600 hover:bg-orange-500 text-white font-extrabold text-[10.5px] uppercase tracking-wider disabled:opacity-40 cursor-pointer flex items-center gap-1 shadow shadow-orange-950/20"
+                  >
+                    {store.isWritingChapter ? (
+                      <>
+                        <span className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        ĐANG VIẾT...
+                      </>
+                    ) : activeChapter?.da_viet ? (
+                      "⚡ VIẾT LẠI (REGENERATE)"
+                    ) : (
+                      "🚀 BẮT ĐẦU VIẾT BẰNG AI"
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Script Text Editor Workspace */}
+              <div className="flex-1 p-6 md:p-8 overflow-y-auto selection:bg-orange-500/20 relative" ref={renderedTextRef}>
+                
+                {store.isWritingChapter ? (
+                  // Active streaming view
+                  <div className="max-w-3xl mx-auto markdown-block bg-[#090909]/40 border border-zinc-900/30 p-6 md:p-8 rounded-xl select-text leading-relaxed">
+                    <MarkdownBody text={store.displayedText} isStreaming={true} />
+                  </div>
+                ) : isEditingScript ? (
+                  // Manual Edit mode
+                  <div className="max-w-3xl mx-auto h-full flex flex-col">
+                    <textarea
+                      className="flex-1 w-full min-h-[450px] p-6 bg-zinc-950 border border-zinc-900 focus:border-zinc-800 rounded-xl text-zinc-300 font-sans text-[13px] leading-relaxed focus:outline-none resize-none overflow-y-auto"
+                      value={scriptEditText}
+                      onChange={(e) => setScriptEditText(e.target.value)}
+                      placeholder="Chỉnh sửa nội dung chi tiết kịch bản chương tại đây..."
+                    />
+                  </div>
+                ) : activeChapter?.da_viet ? (
+                  // Formatted preview view
+                  <div className="max-w-3xl mx-auto markdown-block bg-[#090909]/20 border border-zinc-900/30 p-6 md:p-8 rounded-xl leading-relaxed select-text">
+                    <h2 className="text-xl md:text-2xl font-black text-white mb-6 uppercase border-b border-zinc-900 pb-3 tracking-tight font-heading">
+                      {activeChapter.tieu_de}
+                    </h2>
+                    <MarkdownBody text={activeChapter.noi_dung_kich_ban} isStreaming={false} />
+                  </div>
+                ) : (
+                  // Fallback empty view with instructions
+                  <div className="max-w-3xl mx-auto text-center py-20 space-y-5 select-none">
+                    <div className="w-16 h-16 rounded-full bg-zinc-950 border border-zinc-900 flex items-center justify-center text-3xl mx-auto shadow-md">
+                      🎬
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="font-extrabold text-sm text-zinc-400 uppercase tracking-wider font-heading">TẬP KỊCH BẢN NÀY CHƯA ĐƯỢC THỰC THI</h3>
+                      <p className="text-xs text-zinc-550 max-w-md mx-auto leading-relaxed">
+                        Hệ thống đã nhận diện khóa dàn ý chi tiết và hồ sơ nhân vật. Vui lòng thiết lập ghi chú gợi ý tác chiến (Scratchpad) ở panel trái nếu muốn định hướng, sau đó nhấn nút "BẮT ĐẦU VIẾT BẰNG AI" để tiến hành viết.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleWriteChapter}
+                      className="px-5 py-2.5 text-xs font-extrabold bg-orange-600 hover:bg-orange-500 border-none text-white rounded transition-colors shadow cursor-pointer uppercase tracking-wider"
+                    >
+                      🚀 BẮT ĐẦU VIẾT TẬP {activeChapter?.so_chuong}
+                    </button>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Script footer signatures details */}
+              {activeChapter?.da_viet && !store.isWritingChapter && (
+                <div className="h-10 px-6 border-t border-zinc-900 bg-zinc-950 flex items-center gap-2 select-none text-[10px] shrink-0 overflow-x-auto scrollbar-none">
+                  <span className="text-zinc-550 font-mono uppercase tracking-wider shrink-0 font-bold">Vật dụng dệt thành công:</span>
+                  <div className="flex gap-1.5 shrink-0">
+                    {parsedProps.map((p, idx) => {
+                      const detected = store.detectedProps.includes(p);
+                      return (
+                        <span 
+                          key={idx} 
+                          className={`px-2 py-0.5 rounded font-mono font-medium border ${
+                            detected 
+                              ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400' 
+                              : 'bg-zinc-900/40 border-zinc-850 text-zinc-600'
+                          }`}
+                        >
+                          {detected ? '✓' : '✗'} {p}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+            </section>
+
+          </div>
+        )}
+
+      </div>
+
+      {/* ==================== SETTINGS KEY MODAL ==================== */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm select-none">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm select-none">
           <div className="w-full max-w-md bg-[#0d0d0d] border border-zinc-900 rounded-xl p-6 shadow-2xl relative">
             
             <div className="flex items-center justify-between mb-4 border-b border-zinc-900 pb-3">
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider font-heading">⚙️ Cấu Hình API Keys Gemini</h2>
+              <h2 className="text-xs font-bold text-white uppercase tracking-wider font-mono">⚙️ CẤU HÌNH API KEYS GEMINI ROTATION</h2>
               <button 
                 onClick={() => setIsSettingsOpen(false)}
-                className="text-zinc-500 hover:text-white font-mono text-sm cursor-pointer"
+                className="text-zinc-500 hover:text-white font-mono text-xs cursor-pointer"
               >
                 [X]
               </button>
@@ -1150,11 +1095,11 @@ export default function Home() {
 
             <div className="space-y-4 text-xs">
               <p className="text-zinc-500 leading-relaxed text-[11px]">
-                Bạn có thể nhập <strong>nhiều API Key Gemini</strong> (mỗi dòng một Key). Hệ thống sẽ tự động xoay vòng phím dự phòng khi phím chính đạt giới hạn số lượng yêu cầu (quota error 429).
+                Nhập danh sách **API Keys Gemini** (mỗi dòng một phím). Hệ thống sẽ tự động chuyển đổi sang phím dự phòng khi phím chính đạt quota giới hạn hoặc bị chặn (lỗi 429).
               </p>
 
               <div>
-                <label className="text-[10px] font-mono font-bold text-zinc-400 block mb-1">DANH SÁCH API KEYS (MỖI DÒNG MỘT KEY)</label>
+                <label className="text-[10px] font-mono font-bold text-zinc-400 block mb-1 uppercase">Danh sách Keys của bạn</label>
                 <textarea
                   className="w-full h-32 p-2.5 bg-zinc-950 border border-zinc-900 rounded text-xs font-mono text-zinc-300 focus:outline-none focus:border-zinc-800 placeholder-zinc-700"
                   value={keyInputText}
@@ -1163,18 +1108,17 @@ export default function Home() {
                 />
               </div>
 
-              {/* Status information */}
-              <div className="bg-zinc-950 border border-zinc-900 p-3 rounded space-y-1 font-mono text-[10px] text-zinc-400">
+              <div className="bg-zinc-950 border border-zinc-900 p-3 rounded space-y-1.5 font-mono text-[10px] text-zinc-450">
                 <div className="flex justify-between">
-                  <span>Số lượng keys khả dụng:</span>
+                  <span>Số lượng phím khả dụng:</span>
                   <span className="text-white font-bold">{store.apiKeys.length}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>API Key đang hoạt động:</span>
+                  <span>Phím hoạt động hiện tại:</span>
                   <span className="text-amber-500 font-bold">
                     {store.apiKeys.length > 0 
                       ? `Key #${store.activeApiKeyIndex + 1} (${store.apiKeys[store.activeApiKeyIndex].substring(0, 8)}...)`
-                      : "Sử dụng key máy chủ mặc định"}
+                      : "API Key máy chủ mặc định"}
                   </span>
                 </div>
               </div>
@@ -1182,15 +1126,15 @@ export default function Home() {
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   onClick={() => setIsSettingsOpen(false)}
-                  className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded font-bold cursor-pointer"
+                  className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white rounded font-bold cursor-pointer transition-colors"
                 >
                   HỦY
                 </button>
                 <button
                   onClick={handleSaveApiKeys}
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded font-bold cursor-pointer shadow"
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded font-bold cursor-pointer transition-colors shadow"
                 >
-                  LƯU CẤU HÌNH
+                  LƯU PHÍM XOAY VÒNG
                 </button>
               </div>
             </div>
