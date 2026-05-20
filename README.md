@@ -70,12 +70,13 @@ GEMINI_API_KEY=your_gemini_api_key_here
 
 ## 📁 Cấu Trúc Các Tệp Tin Chính
 
-*   `src/store/state-json.ts`: Quản lý trạng thái Zustand lưu trữ thông số sinh lý và tài nguyên nhân vật.
-*   `src/app/api/generate/route.ts`: API Route Handler sử dụng Vercel AI SDK để bắt luồng stream từ mô hình `gemini-1.5-flash` và áp luật mạt thế.
-*   `src/app/workspace/page.tsx`: Giao diện chính của bảng điều khiển Workspace chia 2 cột.
-*   `src/app/page.js`: Tệp điều hướng tự động chuyển từ `/` sang `/workspace`.
-*   `src/app/globals.css`: Thiết lập biến màu sắc, phông chữ, thanh cuộn và hiệu ứng con trỏ nhấp nháy.
-*   `run.bat`: Trình kích hoạt tự động chạy dự án chỉ với một chạm.
+*   `src/store/useNovelStore.ts`: Quản lý bộ nhớ 3 tầng (Lõi bất biến - Tóm tắt cuốn chiếu - Trí nhớ ngắn hạn) sử dụng Zustand + Persist + Manual Hydration an toàn cho Next.js SSR.
+*   `src/app/api/generate/route.ts`: API Route Handler xử lý chuỗi Prompt Chaining 4 Node (`GENERATE_OUTLINE`, `EXTRACT_CHARACTERS`, `WRITE_SCRIPT`, `COMMIT_MEMORY`) nén ký ức cuốn chiếu bằng mô hình `gemini-1.5-flash`.
+*   `src/app/workspace/page.tsx`: Giao diện làm việc (Workspace) dạng Split-View cao cấp, chia cột tỉ lệ vàng giúp tác giả trực quan giám sát trí nhớ vĩ mô của AI.
+*   `src/app/page.js`: Tệp trung chuyển tự động chuyển hướng người dùng từ trang chủ `/` sang `/workspace` một cách an toàn.
+*   `src/app/globals.css`: Thiết lập biến màu sắc hệ thống màu tối sci-fi, phông chữ, thanh cuộn và hiệu ứng con trỏ nhấp nháy.
+*   `run.bat`: Trình kích hoạt tự động khởi động dự án chỉ với một chạm.
+*   `task.md`: Bản ghi toàn diện về Kế hoạch triển khai, Nhật ký hoàn thành, Hướng dẫn vận hành và Checklist tiến độ toàn diện từ đầu cuộc trò chuyện.
 
 ---
 
